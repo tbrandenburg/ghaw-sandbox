@@ -56,16 +56,14 @@ For any issue found that is outside this PR's scope:
 
 **If all checks pass:**
 
-    gh pr review {pr} --approve
     gh issue edit {linked-issue-number} \
-      --add-label "reviewed" \
+      --add-label "status:reviewed" \
       --remove-label "in-progress"
     gh pr comment {pr} \
-      --body "✅ Review passed. All acceptance criteria met and DoD satisfied. @{po_handle} please approve for merge."
+      --body "## Review Summary\n\n✅ Technical review passed. All acceptance criteria met and DoD satisfied.\n\n@{po_handle} — please review and approve this PR for merge when ready."
 
 **If critical issues found:**
 
     gh pr review {pr} --request-changes \
-      --body "❌ Changes requested:
-      {summary of blocking issues}"
+      --body "❌ Changes requested:\n{summary of blocking issues}"
     # Issue stays in-progress — Dev Agent picks up next cycle
