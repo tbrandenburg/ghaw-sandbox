@@ -27,10 +27,8 @@ jobs:
             --state open \
             --json number,headRefName,statusCheckRollup,reviews,body,title)
 
-          # CI success + no reviews yet
+          # No failing checks + no reviews yet (empty checks = no CI = ok to review)
           CANDIDATES=$(echo "$OPEN_PRS" | jq '[.[] | select(
-            (.statusCheckRollup != null) and
-            (.statusCheckRollup | map(select(.conclusion == "SUCCESS")) | length) > 0 and
             (.statusCheckRollup | map(select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")) | length) == 0 and
             (.reviews | length) == 0
           )]')
