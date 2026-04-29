@@ -27,9 +27,7 @@ jobs:
           OPEN_PRS=$(gh pr list \
             --repo ${{ github.repository }} \
             --state open \
-            --json number,title,body,headRefName,baseRefName,reviewDecision,\
-statusCheckRollup,mergeStateStatus,labels,additions,deletions,changedFiles,\
-commits,createdAt,updatedAt)
+            --json number,title,body,headRefName,baseRefName,reviewDecision,statusCheckRollup,mergeStateStatus,labels,additions,deletions,changedFiles,commits,createdAt,updatedAt)
 
           CANDIDATES=$(echo "$OPEN_PRS" | jq '[.[] | select(
             .reviewDecision == "APPROVED" and

@@ -6,12 +6,12 @@
 
 GHAW implements a fully autonomous development cycle on top of GitHub Issues and Pull Requests:
 
-```
+```text
 open → ready → in-progress → reviewed → closed
 ```
 
 | Agent | Trigger | Job |
-|---|---|---|
+| --- | --- | --- |
 | **Planner** | Issue opened | Creates implementation plan + sets severity/priority/complexity labels |
 | **Groomer** | Daily 06:00 UTC | Checks clarity, feasibility, defocus; splits large issues |
 | **Sprint Planner** | Daily 07:00 UTC | WSJF ranking; assigns top N to in-progress |
@@ -74,7 +74,7 @@ Open an issue — the Planner Agent will create an implementation plan within mi
 All labels follow the `key:value` namespace pattern:
 
 | Namespace | Values |
-|---|---|
+| --- | --- |
 | `severity:` | critical, high, medium, low, trivial |
 | `priority:` | critical, high, medium, low, trivial |
 | `complexity:` | xl, l, m, s, xs |
@@ -90,7 +90,7 @@ Labels are created by `make setup-labels`. Without them, `gh issue edit --add-la
 
 All agents follow the same three-phase pattern:
 
-```
+```text
 Bash Preparation  →  OpenCode Run  →  Bash Verification
 ```
 
@@ -105,7 +105,7 @@ See [GitHubDevStates](https://github.com/tbrandenburg/eddy) for full architectur
 ## Makefile.ghaw Targets
 
 | Target | Description |
-|---|---|
+| --- | --- |
 | `install` | Install all files (skip existing) |
 | `install-force` | Overwrite all existing files |
 | `install-dry` | Preview only — no changes |
