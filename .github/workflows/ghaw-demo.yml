@@ -42,7 +42,11 @@ jobs:
           else
             echo "has_activity=true" >> $GITHUB_OUTPUT
           fi
-          echo "CLOSED=$CLOSED" >> $GITHUB_ENV
+          {
+            echo 'CLOSED<<EOF'
+            echo "$CLOSED"
+            echo 'EOF'
+          } >> $GITHUB_ENV
 
       - name: Run E2E tests (optional)
         if: steps.fetch.outputs.has_activity == 'true'

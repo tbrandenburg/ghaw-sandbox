@@ -52,9 +52,17 @@ jobs:
 
           echo "READY_JSON=$READY"       >> $GITHUB_ENV
           echo "BLOCKED_JSON=$BLOCKED"   >> $GITHUB_ENV
-          echo "OPEN_PRS_JSON=$OPEN_PRS" >> $GITHUB_ENV
+          {
+            echo 'OPEN_PRS_JSON<<EOF'
+            echo "$OPEN_PRS"
+            echo 'EOF'
+          } >> $GITHUB_ENV
           echo "MAX_WIP=$MAX_WIP"        >> $GITHUB_ENV
-          echo "CURRENT_WIP=$CURRENT_WIP" >> $GITHUB_ENV
+          {
+            echo 'CURRENT_WIP<<EOF'
+            echo "$CURRENT_WIP"
+            echo 'EOF'
+          } >> $GITHUB_ENV
 
       - name: Build prompt
         id: build

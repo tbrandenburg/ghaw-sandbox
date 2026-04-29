@@ -41,7 +41,11 @@ jobs:
           else
             echo "has_candidates=true"  >> $GITHUB_OUTPUT
           fi
-          echo "CANDIDATES=$CANDIDATES" >> $GITHUB_ENV
+          {
+            echo 'CANDIDATES<<EOF'
+            echo "$CANDIDATES"
+            echo 'EOF'
+          } >> $GITHUB_ENV
 
       - name: Collect PR diffs and issues
         if: env.CANDIDATES != '[]'
@@ -59,7 +63,11 @@ jobs:
               --arg diff "$DIFF" --argjson issue "$ISSUE" \
               '. + [{"pr": $meta, "diff": $diff, "issue": $issue}]')
           done
-          echo "REVIEW_DATA=$REVIEW_DATA" >> $GITHUB_ENV
+          {
+            echo 'REVIEW_DATA<<EOF'
+            echo "$REVIEW_DATA"
+            echo 'EOF'
+          } >> $GITHUB_ENV
 
       - name: Build prompt
         id: build

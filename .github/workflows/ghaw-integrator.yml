@@ -41,7 +41,11 @@ jobs:
             exit 0
           fi
           echo "has_candidates=true" >> $GITHUB_OUTPUT
-          echo "CANDIDATES=$CANDIDATES" >> $GITHUB_ENV
+          {
+            echo 'CANDIDATES<<EOF'
+            echo "$CANDIDATES"
+            echo 'EOF'
+          } >> $GITHUB_ENV
 
       - name: Collect diffs and changed file manifests
         if: env.CANDIDATES != ''
@@ -56,12 +60,20 @@ jobs:
               --arg diff "$DIFF_HEAD" \
               '. + {($pr | tostring): {"files": $files, "diff_preview": $diff}}')
           done
-          echo "DIFFS=$DIFFS" >> $GITHUB_ENV
+          {
+            echo 'DIFFS<<EOF'
+            echo "$DIFFS"
+            echo 'EOF'
+          } >> $GITHUB_ENV
 
       - name: Collect main branch state
         run: |
           MAIN_SHA=$(git rev-parse HEAD)
-          echo "MAIN_SHA=$MAIN_SHA" >> $GITHUB_ENV
+          {
+            echo 'MAIN_SHA<<EOF'
+            echo "$MAIN_SHA"
+            echo 'EOF'
+          } >> $GITHUB_ENV
           {
             echo 'MAIN_TREE<<EOF'
             git ls-tree -r --name-only HEAD | head -100
@@ -76,7 +88,11 @@ jobs:
               '[.files[].path | {path: ., pr: $pr}]' 2>/dev/null
           done | jq -s 'add // [] | group_by(.path) | map(select(length > 1)) |
             map({file: .[0].path, prs: [.[].pr]})')
-          echo "CONFLICT_MAP=$CONFLICT_MAP" >> $GITHUB_ENV
+          {
+            echo 'CONFLICT_MAP<<EOF'
+            echo "$CONFLICT_MAP"
+            echo 'EOF'
+          } >> $GITHUB_ENV
 
       - name: Collect issue metadata for all candidate PRs
         run: |
@@ -94,7 +110,11 @@ jobs:
                 '. + {($pr | tostring): $issue}')
             fi
           done
-          echo "ISSUES=$ISSUES" >> $GITHUB_ENV
+          {
+            echo 'ISSUES<<EOF'
+            echo "$ISSUES"
+            echo 'EOF'
+          } >> $GITHUB_ENV
 
       - name: Build prompt
         id: build
