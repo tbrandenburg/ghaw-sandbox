@@ -1,0 +1,79 @@
+name: GHAW - Planner Agent
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to plan'
+        required: true
+        type: number
+
+jobs:
+  check-plan-needed:
+    runs-on: ubuntu-latest
+    outputs:
+      issue_number: ${{ steps.check.outputs.issue_number }}
+      needs_plan:   ${{ steps.check.outputs.needs_plan }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check if plan needed
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            ISSUE_NUMBER=${{ github.event.issue.number }}
+          else
+            ISSUE_NUMBER=${{ inputs.issue_number }}
+          fi
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+
+          HAS_PLAN=$(gh issue view $ISSUE_NUMBER \
+            --repo ${{ github.repository }} \
+            --json comments \
+            --jq '[.comments[].body | contains("<!-- PLAN -->")] | any')
+
+          if [ "$HAS_PLAN" = "true" ]; then
+            echo "needs_plan=false" >> $GITHUB_OUTPUT
+          else
+            echo "needs_plan=true" >> $GITHUB_OUTPUT
+          fi
+
+  run-planner:
+    needs: check-plan-needed
+    if: needs.check-plan-needed.outputs.needs_plan == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name: planner
+      command:  ghaw-plan-issue
+      prompt:   ${{ needs.check-plan-needed.outputs.issue_number }}
+      agent:    planner
+      model:    opencode/big-pickle
+      timeout-minutes: 60
+    permissions:
+      issues:   write
+      contents: read
+    secrets: inherit
+
+  verify-plan:
+    needs: [check-plan-needed, run-planner]
+    if: needs.check-plan-needed.outputs.needs_plan == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Verify plan was created
+        run: |
+          ISSUE_NUMBER=${{ needs.check-plan-needed.outputs.issue_number }}
+          HAS_PLAN=$(gh issue view $ISSUE_NUMBER \
+            --repo ${{ github.repository }} \
+            --json comments \
+            --jq '[.comments[].body | contains("<!-- PLAN -->")] | any')
+
+          if [ "$HAS_PLAN" != "true" ]; then
+            gh issue comment $ISSUE_NUMBER \
+              --body "❌ Planner Agent failed to create implementation plan."
+            exit 1
+          fi
+          echo "✅ Plan verified for issue #$ISSUE_NUMBER" >> $GITHUB_STEP_SUMMARY
