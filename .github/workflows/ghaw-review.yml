@@ -92,8 +92,10 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Log review decisions
+        env:
+          PROMPT_DATA: ${{ needs.prepare.outputs.prompt }}
         run: |
-          for PR in $(echo '${{ needs.prepare.outputs.prompt }}' | jq -r '.' | grep -oP '"number":\K\d+' | head -5); do
+          for PR in $(echo "$PROMPT_DATA" | jq -r '.' | grep -oP '"number":\K\d+' | head -5); do
             DECISION=$(gh pr view $PR --json reviewDecision -q .reviewDecision 2>/dev/null || echo "UNKNOWN")
             echo "PR #$PR review decision: $DECISION" >> $GITHUB_STEP_SUMMARY
           done

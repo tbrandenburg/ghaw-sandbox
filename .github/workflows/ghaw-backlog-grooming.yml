@@ -54,6 +54,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Write summary
+        env:
+          ISSUES_JSON: ${{ needs.prepare.outputs.issues_json }}
         run: |
-          COUNT=$(echo '${{ needs.prepare.outputs.issues_json }}' | jq length)
+          COUNT=$(echo "$ISSUES_JSON" | jq length)
           echo "✅ Groomed $COUNT issues" >> $GITHUB_STEP_SUMMARY
