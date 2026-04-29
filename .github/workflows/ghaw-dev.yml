@@ -1,0 +1,82 @@
+name: GHAW - Dev Agent
+
+on:
+  schedule:
+    - cron: '0 * * * *'    # Every full hour
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_candidates: ${{ steps.filter.outputs.has_candidates }}
+      prompt:         ${{ steps.build.outputs.prompt }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Fetch in-progress issues and open PRs
+        id: filter
+        run: |
+          IN_PROGRESS=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label in-progress \
+            --json number,title,body,labels,comments)
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,headRefName,body)
+
+          # Filter: issues with no linked PR (no "Closes #N" in any open PR body)
+          CANDIDATES=$(echo "$IN_PROGRESS" | jq --argjson prs "$OPEN_PRS" '
+            . as $issues |
+            $issues | map(
+              . as $issue |
+              ($prs | map(.body | test("Closes #\($issue.number)"; "i")) | any) as $has_pr |
+              if $has_pr then empty else . end
+            )')
+
+          COUNT=$(echo "$CANDIDATES" | jq length)
+          if [ "$COUNT" = "0" ]; then
+            echo "has_candidates=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_candidates=true" >> $GITHUB_OUTPUT
+          fi
+
+          echo "CANDIDATES=$CANDIDATES" >> $GITHUB_ENV
+          echo "OPEN_PRS=$OPEN_PRS"     >> $GITHUB_ENV
+
+      - name: Build prompt
+        id: build
+        run: |
+          PROMPT="In-progress issues without PR: $CANDIDATES
+          Open PRs: $OPEN_PRS"
+          echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
+
+  run-dev:
+    needs: prepare
+    if: needs.prepare.outputs.has_candidates == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name: dev-agent
+      command:  ghaw-dev-issue
+      prompt:   ${{ needs.prepare.outputs.prompt }}
+      agent:    dev
+      model:    opencode/big-pickle
+      timeout-minutes: 60
+    permissions:
+      issues:        write
+      pull-requests: write
+      contents:      write
+    secrets: inherit
+
+  verify:
+    needs: [prepare, run-dev]
+    if: needs.prepare.outputs.has_candidates == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Verify PR exists
+        run: |
+          OPEN_PRS=$(gh pr list --repo ${{ github.repository }} --state open --json number,url)
+          echo "Open PRs after dev run: $OPEN_PRS" >> $GITHUB_STEP_SUMMARY

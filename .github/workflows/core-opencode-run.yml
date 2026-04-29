@@ -1,0 +1,64 @@
+name: GHAW - Core OpenCode Runner
+
+on:
+  workflow_call:
+    inputs:
+      run-name:
+        description: 'Human-readable name for this run'
+        required: true
+        type: string
+      command:
+        description: 'OpenCode command to run (.opencode/commands/<name>.md)'
+        required: true
+        type: string
+      prompt:
+        description: 'Arguments passed to the command as $ARGUMENTS'
+        required: true
+        type: string
+      agent:
+        description: 'OpenCode agent to use (.opencode/agents/<name>.md)'
+        required: true
+        type: string
+      model:
+        description: 'LLM model identifier'
+        required: false
+        type: string
+        default: opencode/big-pickle
+      timeout-minutes:
+        description: 'Job timeout in minutes'
+        required: false
+        type: number
+        default: 60
+
+jobs:
+  run:
+    name: ${{ inputs.run-name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install opencode
+        run: npm install -g opencode-ai
+
+      - name: Run opencode
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN:     ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          opencode run \
+            --command "${{ inputs.command }}" \
+            --agent   "${{ inputs.agent }}" \
+            --model   "${{ inputs.model }}" \
+            <<< "${{ inputs.prompt }}"
+
+      - name: Upload session artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-${{ inputs.run-name }}-${{ github.run_id }}
+          path: .opencode/sessions/
+          if-no-files-found: ignore

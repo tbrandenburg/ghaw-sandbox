@@ -1,0 +1,507 @@
+## =============================================================================
+## Makefile.ghaw - GHAW Bootstrap Installer
+## =============================================================================
+##
+## DESCRIPTION:
+##   Installs GitHub Agentic Workflow (GHAW) files into the current repo and
+##   ensures all required labels exist with correct colors and descriptions.
+##   Bootstrapping is fully idempotent — safe to run multiple times.
+##
+## LABEL SYSTEMS (delegated to Makefile.ghprj patterns):
+##   • Workflow: open, ready, in-progress, reviewed, closed, released
+##   • Severity: critical, high, medium, low
+##   • Priority: high, medium, low
+##   • Complexity: xl, l, m, s, xs   (SAFe Fibonacci)
+##   • Confidence: certain, high, medium, low, none
+##   • Status:  ready, in-progress, reviewed, blocked, defocus
+##   • Type:    bug, feature, arch, feedback, chore, docs, refactor
+##
+## USAGE:
+##   make -f Makefile.ghaw install           # Install files (skip existing)
+##   make -f Makefile.ghaw install-force     # Install files (overwrite all)
+##   make -f Makefile.ghaw install-dry       # Preview what would be installed
+##   make -f Makefile.ghaw setup-labels      # Create/update all labels (idempotent)
+##   make -f Makefile.ghaw setup-labels-dry  # Preview label changes without applying
+##   make -f Makefile.ghaw list-labels       # Show current labels in repo
+##   make -f Makefile.ghaw clean             # Remove all installed files
+##   make -f Makefile.ghaw info              # Show version + config
+##   make -f Makefile.ghaw publish           # Bump version + tag + release
+##
+## OPTIONS:
+##   REPO=owner/name       Override repo (default: auto-detected via gh)
+##   VERBOSE=true          Show gh API calls
+##   DEBUG=true            Show all parameters before API calls
+##
+## =============================================================================
+
+SHELL := /bin/bash
+.ONESHELL:
+.SHELLFLAGS := -euo pipefail -c
+
+GHAW_VERSION := $(shell cat .ghaw-version 2>/dev/null || echo "0.1.0")
+REPO         ?= $(shell gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)
+
+VERBOSE ?= false
+DEBUG   ?= false
+
+# =============================================================================
+# FILE LIST
+# =============================================================================
+
+GHAW_FILES := \
+	.github/config/config.yml \
+	.github/workflows/core-opencode-run.yml \
+	.github/workflows/ghaw-planner.yml \
+	.github/workflows/ghaw-backlog-grooming.yml \
+	.github/workflows/ghaw-sprint-planning.yml \
+	.github/workflows/ghaw-dev.yml \
+	.github/workflows/ghaw-cicd.yml \
+	.github/workflows/ghaw-review.yml \
+	.github/workflows/ghaw-integrator.yml \
+	.github/workflows/ghaw-demo.yml \
+	.opencode/opencode.jsonc \
+	.opencode/agents/planner.md \
+	.opencode/agents/groomer.md \
+	.opencode/agents/dev.md \
+	.opencode/agents/review.md \
+	.opencode/agents/integrator.md \
+	.opencode/agents/demo.md \
+	.opencode/commands/ghaw-plan-issue.md \
+	.opencode/commands/ghaw-groom-issue.md \
+	.opencode/commands/ghaw-sprint-plan.md \
+	.opencode/commands/ghaw-dev-issue.md \
+	.opencode/commands/ghaw-resolve-ci-errors.md \
+	.opencode/commands/ghaw-review.md \
+	.opencode/commands/ghaw-integrate.md \
+	.opencode/commands/ghaw-demo.md \
+	DEFINITION_OF_DONE.md
+
+# =============================================================================
+# VALIDATION GUARDS
+# =============================================================================
+
+define REQUIRE_TOOLS
+command -v gh     >/dev/null 2>&1 || { echo "ERROR: gh not found";     exit 1; }
+command -v jq     >/dev/null 2>&1 || { echo "ERROR: jq not found";     exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 not found"; exit 1; }
+gh auth status    >/dev/null 2>&1 || { echo "ERROR: gh not authenticated (run: gh auth login)"; exit 1; }
+endef
+
+define REQUIRE_REPO
+[ -n "$(REPO)" ] || { echo "ERROR: Could not resolve repo. Set REPO=owner/name"; exit 1; }
+endef
+
+# =============================================================================
+# SEMANTIC COLOR CONSTANTS (hex without '#')
+# =============================================================================
+
+RED        := D73A49
+ORANGE     := FB8500
+YELLOW     := FBCA04
+GREEN      := 0E8A16
+BLUE       := 1D76DB
+PURPLE     := D4C5F9
+LIGHT_BLUE := C5DEF5
+DARK_BLUE  := 0052CC
+DARK_RED   := B60205
+DARK_ORANGE := D93F0B
+DARK_GREEN := 28A745
+GREY       := CFD3D7
+LIGHT_GREEN := A2EEEF
+
+# =============================================================================
+# LABEL SPECIFICATIONS
+# Format per entry: name|color|description
+# =============================================================================
+
+# --- Workflow states ---
+WORKFLOW_SPECS := \
+	open|$(LIGHT_BLUE)|New or unrefined work. Collaborative grooming allowed. \
+	ready|$(GREEN)|Definition of Ready met. Pullable by dev team (PO gate). \
+	in-progress|$(YELLOW)|Work pulled by team; implementation underway. \
+	reviewed|$(BLUE)|PR approved + CI green. Awaiting PO merge approval. \
+	blocked|$(RED)|Work is blocked by an external dependency or issue. \
+	defocus|$(GREY)|Out of scope or not actionable — deferred by groomer.
+
+# --- Severity (impact-based) ---
+SEVERITY_SPECS := \
+	severity:critical|$(DARK_RED)|Critical severity — system failure or data loss \
+	severity:high|$(DARK_ORANGE)|High severity — significant impact on functionality \
+	severity:medium|$(YELLOW)|Medium severity — limited impact or workaround exists \
+	severity:low|$(GREEN)|Low severity — cosmetic or documentation issues \
+	severity:trivial|$(GREY)|Trivial severity — negligible impact
+
+# --- Priority (urgency-based) ---
+PRIORITY_SPECS := \
+	priority:critical|$(DARK_RED)|Critical priority — urgent attention required \
+	priority:high|$(ORANGE)|High priority — address in current sprint \
+	priority:medium|$(YELLOW)|Normal priority — standard workflow \
+	priority:low|$(DARK_GREEN)|Low priority — can be deferred if needed \
+	priority:trivial|$(GREY)|Trivial priority — address opportunistically
+
+# --- Complexity (SAFe Fibonacci job size) ---
+COMPLEXITY_SPECS := \
+	complexity:xl|$(DARK_RED)|XL complexity — SAFe Fibonacci 13 \
+	complexity:l|$(RED)|L complexity — SAFe Fibonacci 8 \
+	complexity:m|$(YELLOW)|M complexity — SAFe Fibonacci 5 \
+	complexity:s|$(GREEN)|S complexity — SAFe Fibonacci 3 \
+	complexity:xs|$(DARK_GREEN)|XS complexity — SAFe Fibonacci 1
+
+# --- Confidence (certainty about approach) ---
+CONFIDENCE_SPECS := \
+	confidence:certain|$(DARK_GREEN)|Certain — fully understood, minimal risk \
+	confidence:high|$(GREEN)|High confidence — well understood, low risk \
+	confidence:medium|$(YELLOW)|Medium confidence — some uncertainty, moderate risk \
+	confidence:low|$(ORANGE)|Low confidence — high uncertainty, significant unknowns \
+	confidence:none|$(DARK_RED)|No confidence — approach unclear, needs spike
+
+# --- Type ---
+TYPE_SPECS := \
+	type:bug|$(RED)|Bug — something is broken \
+	type:feature|$(LIGHT_GREEN)|Feature — new functionality \
+	type:arch|$(YELLOW)|Architecture — structural change \
+	type:feedback|$(PURPLE)|Feedback — from demo or review \
+	type:chore|$(GREY)|Chore — maintenance, no user-visible change \
+	type:docs|$(BLUE)|Documentation — docs only \
+	type:refactor|$(ORANGE)|Refactor — code restructuring without behaviour change
+
+ALL_LABEL_SPECS := $(WORKFLOW_SPECS) $(SEVERITY_SPECS) $(PRIORITY_SPECS) \
+                   $(COMPLEXITY_SPECS) $(CONFIDENCE_SPECS) $(TYPE_SPECS)
+
+# =============================================================================
+# LABEL MANAGEMENT — IDEMPOTENT CORE
+# =============================================================================
+
+# Applies a single label spec "name|color|description" — creates or updates
+define APPLY_LABEL
+name="$(1)"; color="$(2)"; desc="$(3)"; \
+encoded=$$(python3 -c \
+  'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$name"); \
+if [ "$(DEBUG)" = "true" ]; then \
+  echo "DEBUG: label='$$name' color='$$color' desc='$$desc'"; \
+fi; \
+if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
+  echo "  UPDATE  $$name"; \
+  if [ "$(VERBOSE)" = "true" ]; then \
+    echo "  VERBOSE: PATCH repos/$(REPO)/labels/$$encoded"; \
+  fi; \
+  if ! result=$$(gh api -X PATCH "repos/$(REPO)/labels/$$encoded" \
+      -f new_name="$$name" -f color="$$color" -f description="$$desc" 2>&1); then \
+    echo "  ERROR: Failed to update '$$name': $$result"; exit 1; \
+  fi; \
+else \
+  echo "  CREATE  $$name"; \
+  if [ "$(VERBOSE)" = "true" ]; then \
+    echo "  VERBOSE: POST repos/$(REPO)/labels"; \
+  fi; \
+  if ! result=$$(gh api -X POST "repos/$(REPO)/labels" \
+      -f name="$$name" -f color="$$color" -f description="$$desc" 2>&1); then \
+    echo "  ERROR: Failed to create '$$name': $$result"; exit 1; \
+  fi; \
+fi
+endef
+
+# Dry-runs a single label spec — shows WOULD CREATE / WOULD UPDATE / OK
+define DRYRUN_LABEL
+name="$(1)"; color="$(2)"; desc="$(3)"; \
+encoded=$$(python3 -c \
+  'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$name"); \
+existing=$$(gh api "repos/$(REPO)/labels/$$encoded" 2>/dev/null || echo ""); \
+if [ -z "$$existing" ]; then \
+  echo "  WOULD CREATE  $$name"; \
+else \
+  cur_color=$$(echo "$$existing" | jq -r '.color'); \
+  cur_desc=$$(echo "$$existing"  | jq -r '.description // ""'); \
+  if [ "$$cur_color" != "$$color" ] || [ "$$cur_desc" != "$$desc" ]; then \
+    echo "  WOULD UPDATE  $$name  (color: $$cur_color→$$color)"; \
+  else \
+    echo "  OK            $$name"; \
+  fi; \
+fi
+endef
+
+# =============================================================================
+# CORE SETUP LOGIC
+# =============================================================================
+
+define RUN_LABELS
+$(REQUIRE_TOOLS)
+$(REQUIRE_REPO)
+echo "$(1) labels in: $(REPO)"
+echo ""
+echo "Workflow states:"
+for spec in $(WORKFLOW_SPECS); do \
+  IFS='|' read -r n c d <<< "$$spec"; \
+  $(if $(filter dry,$(1)),$(call DRYRUN_LABEL,$$n,$$c,$$d),$(call APPLY_LABEL,$$n,$$c,$$d)); \
+done
+echo ""
+echo "Severity:"
+for spec in $(SEVERITY_SPECS); do \
+  IFS='|' read -r n c d <<< "$$spec"; \
+  $(if $(filter dry,$(1)),$(call DRYRUN_LABEL,$$n,$$c,$$d),$(call APPLY_LABEL,$$n,$$c,$$d)); \
+done
+echo ""
+echo "Priority:"
+for spec in $(PRIORITY_SPECS); do \
+  IFS='|' read -r n c d <<< "$$spec"; \
+  $(if $(filter dry,$(1)),$(call DRYRUN_LABEL,$$n,$$c,$$d),$(call APPLY_LABEL,$$n,$$c,$$d)); \
+done
+echo ""
+echo "Complexity:"
+for spec in $(COMPLEXITY_SPECS); do \
+  IFS='|' read -r n c d <<< "$$spec"; \
+  $(if $(filter dry,$(1)),$(call DRYRUN_LABEL,$$n,$$c,$$d),$(call APPLY_LABEL,$$n,$$c,$$d)); \
+done
+echo ""
+echo "Confidence:"
+for spec in $(CONFIDENCE_SPECS); do \
+  IFS='|' read -r n c d <<< "$$spec"; \
+  $(if $(filter dry,$(1)),$(call DRYRUN_LABEL,$$n,$$c,$$d),$(call APPLY_LABEL,$$n,$$c,$$d)); \
+done
+echo ""
+echo "Type:"
+for spec in $(TYPE_SPECS); do \
+  IFS='|' read -r n c d <<< "$$spec"; \
+  $(if $(filter dry,$(1)),$(call DRYRUN_LABEL,$$n,$$c,$$d),$(call APPLY_LABEL,$$n,$$c,$$d)); \
+done
+endef
+
+# =============================================================================
+# PUBLIC TARGETS
+# =============================================================================
+
+.PHONY: install install-force install-dry setup-labels setup-labels-dry \
+        list-labels clean info publish
+
+## Install all GHAW files (skip existing)
+install:
+	@$(REQUIRE_TOOLS)
+	@echo "Installing GHAW $(GHAW_VERSION) into $(REPO)..."
+	@for f in $(GHAW_FILES); do \
+	  if [ -f "$$f" ]; then \
+	    echo "  SKIP  $$f  (exists — use install-force to overwrite)"; \
+	  else \
+	    mkdir -p "$$(dirname $$f)"; \
+	    cp "$(CURDIR)/$$f" "$$f"; \
+	    echo "  COPY  $$f"; \
+	  fi; \
+	done
+	@echo "$(GHAW_VERSION)" > .ghaw-version
+	@echo ""
+	@echo "✅ Files installed. Next steps:"
+	@echo "   1. make -f Makefile.ghaw setup-labels"
+	@echo "   2. Edit .github/config/config.yml  (set po_handle)"
+	@echo "   3. Settings → Actions → Read/write permissions"
+	@echo "   4. Settings → Actions → Allow GitHub Actions to approve pull requests"
+
+## Install all GHAW files (overwrite existing)
+install-force:
+	@$(REQUIRE_TOOLS)
+	@echo "Force-installing GHAW $(GHAW_VERSION) into $(REPO)..."
+	@for f in $(GHAW_FILES); do \
+	  mkdir -p "$$(dirname $$f)"; \
+	  cp "$(CURDIR)/$$f" "$$f"; \
+	  echo "  COPY  $$f"; \
+	done
+	@echo "$(GHAW_VERSION)" > .ghaw-version
+	@echo "✅ Done."
+
+## Preview what would be installed (no changes)
+install-dry:
+	@echo "Dry run — no files will be written."
+	@echo ""
+	@for f in $(GHAW_FILES); do \
+	  if [ -f "$$f" ]; then \
+	    echo "  SKIP  $$f  (exists)"; \
+	  else \
+	    echo "  COPY  $$f  (new)"; \
+	  fi; \
+	done
+
+## Create or update all required labels (idempotent)
+setup-labels:
+	@$(REQUIRE_TOOLS)
+	@$(REQUIRE_REPO)
+	@echo "Applying labels to: $(REPO)"
+	@echo ""
+	@echo "Workflow states:"
+	@for spec in $(WORKFLOW_SPECS); do \
+	  IFS='|' read -r n c d <<< "$$spec"; \
+	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	  if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
+	    echo "  UPDATE  $$n"; \
+	    gh api -X PATCH "repos/$(REPO)/labels/$$encoded" \
+	      -f new_name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
+	  else \
+	    echo "  CREATE  $$n"; \
+	    gh api -X POST "repos/$(REPO)/labels" \
+	      -f name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
+	  fi; \
+	done
+	@echo ""
+	@echo "Severity:"
+	@for spec in $(SEVERITY_SPECS); do \
+	  IFS='|' read -r n c d <<< "$$spec"; \
+	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	  if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
+	    echo "  UPDATE  $$n"; \
+	    gh api -X PATCH "repos/$(REPO)/labels/$$encoded" \
+	      -f new_name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
+	  else \
+	    echo "  CREATE  $$n"; \
+	    gh api -X POST "repos/$(REPO)/labels" \
+	      -f name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
+	  fi; \
+	done
+	@echo ""
+	@echo "Priority:"
+	@for spec in $(PRIORITY_SPECS); do \
+	  IFS='|' read -r n c d <<< "$$spec"; \
+	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	  if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
+	    echo "  UPDATE  $$n"; \
+	    gh api -X PATCH "repos/$(REPO)/labels/$$encoded" \
+	      -f new_name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
+	  else \
+	    echo "  CREATE  $$n"; \
+	    gh api -X POST "repos/$(REPO)/labels" \
+	      -f name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
+	  fi; \
+	done
+	@echo ""
+	@echo "Complexity:"
+	@for spec in $(COMPLEXITY_SPECS); do \
+	  IFS='|' read -r n c d <<< "$$spec"; \
+	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	  if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
+	    echo "  UPDATE  $$n"; \
+	    gh api -X PATCH "repos/$(REPO)/labels/$$encoded" \
+	      -f new_name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
+	  else \
+	    echo "  CREATE  $$n"; \
+	    gh api -X POST "repos/$(REPO)/labels" \
+	      -f name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
+	  fi; \
+	done
+	@echo ""
+	@echo "Confidence:"
+	@for spec in $(CONFIDENCE_SPECS); do \
+	  IFS='|' read -r n c d <<< "$$spec"; \
+	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	  if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
+	    echo "  UPDATE  $$n"; \
+	    gh api -X PATCH "repos/$(REPO)/labels/$$encoded" \
+	      -f new_name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
+	  else \
+	    echo "  CREATE  $$n"; \
+	    gh api -X POST "repos/$(REPO)/labels" \
+	      -f name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
+	  fi; \
+	done
+	@echo ""
+	@echo "Type:"
+	@for spec in $(TYPE_SPECS); do \
+	  IFS='|' read -r n c d <<< "$$spec"; \
+	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	  if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
+	    echo "  UPDATE  $$n"; \
+	    gh api -X PATCH "repos/$(REPO)/labels/$$encoded" \
+	      -f new_name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
+	  else \
+	    echo "  CREATE  $$n"; \
+	    gh api -X POST "repos/$(REPO)/labels" \
+	      -f name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
+	  fi; \
+	done
+	@echo ""
+	@echo "✅ Labels ready."
+
+## Preview label changes without applying
+setup-labels-dry:
+	@$(REQUIRE_TOOLS)
+	@$(REQUIRE_REPO)
+	@echo "Dry run — label diff for: $(REPO)"
+	@echo ""
+	@echo "Workflow states:"
+	@for spec in $(WORKFLOW_SPECS); do \
+	  IFS='|' read -r n c d <<< "$$spec"; \
+	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	  existing=$$(gh api "repos/$(REPO)/labels/$$encoded" 2>/dev/null || echo ""); \
+	  if [ -z "$$existing" ]; then \
+	    echo "  WOULD CREATE  $$n"; \
+	  else \
+	    cur_color=$$(echo "$$existing" | jq -r '.color'); \
+	    cur_desc=$$(echo "$$existing"  | jq -r '.description // ""'); \
+	    if [ "$$cur_color" != "$$c" ] || [ "$$cur_desc" != "$$d" ]; then \
+	      echo "  WOULD UPDATE  $$n  (color: $$cur_color → $$c)"; \
+	    else \
+	      echo "  OK            $$n"; \
+	    fi; \
+	  fi; \
+	done
+	@for group_name in "Severity:SEVERITY_SPECS" "Priority:PRIORITY_SPECS" \
+	                   "Complexity:COMPLEXITY_SPECS" "Confidence:CONFIDENCE_SPECS" \
+	                   "Type:TYPE_SPECS"; do \
+	  label_group=$${group_name#*:}; \
+	  group_label=$${group_name%:*}; \
+	  echo ""; echo "$$group_label:"; \
+	  eval specs="\$$($$label_group)"; \
+	  for spec in $$specs; do \
+	    IFS='|' read -r n c d <<< "$$spec"; \
+	    encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	    existing=$$(gh api "repos/$(REPO)/labels/$$encoded" 2>/dev/null || echo ""); \
+	    if [ -z "$$existing" ]; then echo "  WOULD CREATE  $$n"; \
+	    else \
+	      cur_color=$$(echo "$$existing" | jq -r '.color'); \
+	      cur_desc=$$(echo "$$existing"  | jq -r '.description // ""'); \
+	      if [ "$$cur_color" != "$$c" ] || [ "$$cur_desc" != "$$d" ]; then \
+	        echo "  WOULD UPDATE  $$n"; \
+	      else echo "  OK            $$n"; fi; \
+	    fi; \
+	  done; \
+	done
+
+## Show all current labels in the repo
+list-labels:
+	@$(REQUIRE_TOOLS)
+	@$(REQUIRE_REPO)
+	@echo "Labels in: $(REPO)"
+	@echo ""
+	@gh api "repos/$(REPO)/labels?per_page=100" --paginate \
+	  | jq -r '.[] | [.name, .color, (.description // "")] | @tsv' \
+	  | column -t -s $$'\t'
+
+## Remove all installed GHAW files
+clean:
+	@echo "Removing GHAW files..."
+	@for f in $(GHAW_FILES); do \
+	  rm -f "$$f" && echo "  DEL  $$f" || true; \
+	done
+	@rm -f .ghaw-version
+	@echo "✅ Clean complete."
+
+## Show installed version and current config
+info:
+	@echo "GHAW version : $(GHAW_VERSION)"
+	@echo "Repo         : $(REPO)"
+	@echo "Files        : $(words $(GHAW_FILES))"
+	@echo ""
+	@if [ -f .github/config/config.yml ]; then \
+	  echo "Config (.github/config/config.yml):"; \
+	  cat .github/config/config.yml; \
+	else \
+	  echo "Config: not installed yet"; \
+	fi
+
+## Bump version, tag, publish GitHub release
+publish:
+	@$(REQUIRE_TOOLS)
+	@echo "Current version: $(GHAW_VERSION)"
+	@echo -n "New version: "; read NEW_VERSION; \
+	echo "$$NEW_VERSION" > .ghaw-version; \
+	git add .ghaw-version; \
+	git commit -m "chore: bump version to $$NEW_VERSION"; \
+	git tag "v$$NEW_VERSION"; \
+	git push && git push --tags; \
+	gh release create "v$$NEW_VERSION" --generate-notes; \
+	echo "✅ Released v$$NEW_VERSION"

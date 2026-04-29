@@ -1,0 +1,99 @@
+name: GHAW - Review Agent
+
+on:
+  schedule:
+    - cron: '0 * * * *'    # Every full hour
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_candidates: ${{ steps.filter.outputs.has_candidates }}
+      prompt:         ${{ steps.build.outputs.prompt }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find reviewable PRs
+        id: filter
+        run: |
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,headRefName,statusCheckRollup,reviews,body,title)
+
+          # CI success + no reviews yet
+          CANDIDATES=$(echo "$OPEN_PRS" | jq '[.[] | select(
+            (.statusCheckRollup != null) and
+            (.statusCheckRollup | map(select(.conclusion == "SUCCESS")) | length) > 0 and
+            (.statusCheckRollup | map(select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")) | length) == 0 and
+            (.reviews | length) == 0
+          )]')
+
+          COUNT=$(echo "$CANDIDATES" | jq length)
+          if [ "$COUNT" = "0" ]; then
+            echo "has_candidates=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_candidates=true"  >> $GITHUB_OUTPUT
+          fi
+          echo "CANDIDATES=$CANDIDATES" >> $GITHUB_ENV
+
+      - name: Collect PR diffs and issues
+        if: env.CANDIDATES != '[]'
+        run: |
+          REVIEW_DATA="[]"
+          for PR in $(echo "$CANDIDATES" | jq -r '.[].number'); do
+            DIFF=$(gh pr diff $PR 2>/dev/null | head -500 || echo "(no diff)")
+            META=$(gh pr view $PR --json body,title,number)
+            ISSUE_NUMBER=$(echo "$META" | jq -r '.body' | grep -oP '(?<=Closes #)\d+' | head -1)
+            ISSUE=""
+            if [ -n "$ISSUE_NUMBER" ]; then
+              ISSUE=$(gh issue view $ISSUE_NUMBER --json number,title,body,comments 2>/dev/null || echo "{}")
+            fi
+            REVIEW_DATA=$(echo "$REVIEW_DATA" | jq --argjson meta "$META" \
+              --arg diff "$DIFF" --argjson issue "$ISSUE" \
+              '. + [{"pr": $meta, "diff": $diff, "issue": $issue}]')
+          done
+          echo "REVIEW_DATA=$REVIEW_DATA" >> $GITHUB_ENV
+
+      - name: Build prompt
+        id: build
+        run: |
+          PROMPT="PRs to review: $REVIEW_DATA"
+          echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
+
+  run-review:
+    needs: prepare
+    if: needs.prepare.outputs.has_candidates == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name: review-agent
+      command:  ghaw-review
+      prompt:   ${{ needs.prepare.outputs.prompt }}
+      agent:    review
+      model:    opencode/big-pickle
+      timeout-minutes: 60
+    permissions:
+      issues:        write
+      pull-requests: write
+      contents:      read
+    secrets: inherit
+
+  verify:
+    needs: [prepare, run-review]
+    if: needs.prepare.outputs.has_candidates == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Log review decisions
+        run: |
+          for PR in $(echo '${{ needs.prepare.outputs.prompt }}' | jq -r '.' | grep -oP '"number":\K\d+' | head -5); do
+            DECISION=$(gh pr view $PR --json reviewDecision -q .reviewDecision 2>/dev/null || echo "UNKNOWN")
+            echo "PR #$PR review decision: $DECISION" >> $GITHUB_STEP_SUMMARY
+          done

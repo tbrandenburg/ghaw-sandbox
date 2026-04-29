@@ -1,0 +1,106 @@
+name: GHAW - Sprint Planning Agent
+
+on:
+  schedule:
+    - cron: '0 7 * * *'    # 07:00 UTC daily (after BGA 50min window)
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_candidates: ${{ steps.fetch.outputs.has_candidates }}
+      prompt:         ${{ steps.build.outputs.prompt }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout (for config.yml)
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Fetch candidates and WIP state
+        id: fetch
+        run: |
+          READY=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label ready \
+            --json number,title,labels,comments)
+          BLOCKED=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label blocked \
+            --json number,title,labels,comments)
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,labels,reviews,headRefName)
+          MAX_WIP=$(yq '.max_wip' .github/config/config.yml)
+          CURRENT_WIP=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label in-progress \
+            --json number | jq length)
+
+          TOTAL=$(echo "$READY$BLOCKED" | jq -s 'add | length')
+          if [ "$TOTAL" = "0" ] && [ "$CURRENT_WIP" -ge "$MAX_WIP" ]; then
+            echo "has_candidates=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_candidates=true" >> $GITHUB_OUTPUT
+          fi
+
+          echo "READY_JSON=$READY"       >> $GITHUB_ENV
+          echo "BLOCKED_JSON=$BLOCKED"   >> $GITHUB_ENV
+          echo "OPEN_PRS_JSON=$OPEN_PRS" >> $GITHUB_ENV
+          echo "MAX_WIP=$MAX_WIP"        >> $GITHUB_ENV
+          echo "CURRENT_WIP=$CURRENT_WIP" >> $GITHUB_ENV
+
+      - name: Build prompt
+        id: build
+        run: |
+          PROMPT="Ready issues: $READY_JSON
+          Blocked issues: $BLOCKED_JSON
+          Open PRs: $OPEN_PRS_JSON
+          MAX_WIP: $MAX_WIP
+          CURRENT_WIP: $CURRENT_WIP"
+          echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
+
+      # Gate: remove ready issues without <!-- PLAN --> from candidates
+      - name: Filter unplanned issues
+        run: |
+          for NUMBER in $(echo "$READY_JSON" | jq -r '.[].number'); do
+            HAS_PLAN=$(gh issue view $NUMBER \
+              --repo ${{ github.repository }} \
+              --json comments \
+              --jq '[.comments[].body | contains("<!-- PLAN -->")] | any')
+            if [ "$HAS_PLAN" != "true" ]; then
+              gh issue comment $NUMBER \
+                --body "⏭️ Sprint Planning skipped: missing implementation plan. Planner Agent will create one."
+            fi
+          done
+
+  run-sprint-planner:
+    needs: prepare
+    if: needs.prepare.outputs.has_candidates == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name: sprint-planner
+      command:  ghaw-sprint-plan
+      prompt:   ${{ needs.prepare.outputs.prompt }}
+      agent:    planner
+      model:    opencode/big-pickle
+      timeout-minutes: 30
+    permissions:
+      issues:        write
+      pull-requests: write
+      contents:      read
+    secrets: inherit
+
+  summary:
+    needs: [prepare, run-sprint-planner]
+    if: needs.prepare.outputs.has_candidates == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write summary
+        run: echo "✅ Sprint planning complete" >> $GITHUB_STEP_SUMMARY

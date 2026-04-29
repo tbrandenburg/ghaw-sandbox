@@ -1,0 +1,59 @@
+name: GHAW - Backlog Grooming Agent
+
+on:
+  schedule:
+    - cron: '0 6 * * *'    # 06:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_issues: ${{ steps.fetch.outputs.has_issues }}
+      issues_json: ${{ steps.fetch.outputs.issues_json }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Fetch open issues
+        id: fetch
+        run: |
+          # Top 10 oldest-updated open issues with severity or priority labels
+          ISSUES=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,title,body,labels,comments,updatedAt \
+            --jq 'sort_by(.updatedAt) | .[0:10]')
+
+          COUNT=$(echo "$ISSUES" | jq length)
+          if [ "$COUNT" = "0" ]; then
+            echo "has_issues=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_issues=true" >> $GITHUB_OUTPUT
+            echo "issues_json=$(echo $ISSUES | jq -c .)" >> $GITHUB_OUTPUT
+          fi
+
+  run-groomer:
+    needs: prepare
+    if: needs.prepare.outputs.has_issues == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name: backlog-groomer
+      command:  ghaw-groom-issue
+      prompt:   ${{ needs.prepare.outputs.issues_json }}
+      agent:    groomer
+      model:    opencode/big-pickle
+      timeout-minutes: 50
+    permissions:
+      issues:   write
+      contents: read
+    secrets: inherit
+
+  summary:
+    needs: [prepare, run-groomer]
+    if: needs.prepare.outputs.has_issues == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write summary
+        run: |
+          COUNT=$(echo '${{ needs.prepare.outputs.issues_json }}' | jq length)
+          echo "✅ Groomed $COUNT issues" >> $GITHUB_STEP_SUMMARY
