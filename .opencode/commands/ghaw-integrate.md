@@ -83,10 +83,17 @@ If BEHIND: update the branch
 
 ### 5b: Merge
 
+Extract the linked issue number from the PR body before merging:
+
+    ISSUE_NUM=$(gh pr view {number} --json body --jq '.body' | grep -oP '(?<=Closes #)\d+' | head -1)
+
+Then merge, including `Closes #N` in the squash commit body so GitHub auto-closes the issue:
+
     gh pr merge {number} \
       --squash \
       --delete-branch \
-      --subject "{type}: {title} (#{number})"
+      --subject "{type}: {title} (#{number})" \
+      --body "Closes #${ISSUE_NUM}"
 
 ### 5c: Post-merge verification
 
