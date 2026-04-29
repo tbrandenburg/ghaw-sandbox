@@ -109,22 +109,38 @@ jobs:
             fi
           fi
 
+      - name: Write prompt to file
+        if: ${{ inputs.prompt != '' }}
+        env:
+          PROMPT_CONTENT: ${{ inputs.prompt }}
+        run: printf '%s' "$PROMPT_CONTENT" > _prompt.txt
+
       - name: Run OpenCode ${{ inputs.run-name }}
+        env:
+          OPENCODE_PATH: "$HOME/.opencode/bin"
         run: |
-          if [ -n "${{ inputs.command }}" ]; then
-            if [ -n "${{ inputs.prompt }}" ]; then
-              echo "${{ inputs.prompt }}" | env -i PATH="$HOME/.opencode/bin:$PATH" HOME="$HOME" GH_TOKEN="$GH_TOKEN" opencode run --command "${{ inputs.command }}" --model "${{ inputs.model }}" --agent "${{ inputs.agent }}" > ${{ inputs.run-name }}-results.txt
-            elif [ -n "${{ inputs.prompt-file }}" ]; then
-              PROMPT=$(cat ${{ inputs.prompt-file }})
-              echo "$PROMPT" | env -i PATH="$HOME/.opencode/bin:$PATH" HOME="$HOME" GH_TOKEN="$GH_TOKEN" opencode run --command "${{ inputs.command }}" --model "${{ inputs.model }}" --agent "${{ inputs.agent }}" > ${{ inputs.run-name }}-results.txt
-            else
-              env -i PATH="$HOME/.opencode/bin:$PATH" HOME="$HOME" GH_TOKEN="$GH_TOKEN" opencode run --command "${{ inputs.command }}" --model "${{ inputs.model }}" --agent "${{ inputs.agent }}" > ${{ inputs.run-name }}-results.txt
-            fi
-          elif [ -n "${{ inputs.prompt }}" ]; then
-            echo "${{ inputs.prompt }}" | env -i PATH="$HOME/.opencode/bin:$PATH" HOME="$HOME" GH_TOKEN="$GH_TOKEN" opencode run --model "${{ inputs.model }}" --agent "${{ inputs.agent }}" > ${{ inputs.run-name }}-results.txt
+          OC="env -i PATH=$HOME/.opencode/bin:$PATH HOME=$HOME GH_TOKEN=$GH_TOKEN opencode"
+          CMD="${{ inputs.command }}"
+          MODEL="${{ inputs.model }}"
+          AGENT="${{ inputs.agent }}"
+          OUT="${{ inputs.run-name }}-results.txt"
+
+          if [ -f "_prompt.txt" ]; then
+            PROMPT_SRC="_prompt.txt"
           elif [ -n "${{ inputs.prompt-file }}" ]; then
-            PROMPT=$(cat ${{ inputs.prompt-file }})
-            echo "$PROMPT" | env -i PATH="$HOME/.opencode/bin:$PATH" HOME="$HOME" GH_TOKEN="$GH_TOKEN" opencode run --model "${{ inputs.model }}" --agent "${{ inputs.agent }}" > ${{ inputs.run-name }}-results.txt
+            PROMPT_SRC="${{ inputs.prompt-file }}"
+          else
+            PROMPT_SRC=""
+          fi
+
+          if [ -n "$CMD" ]; then
+            if [ -n "$PROMPT_SRC" ]; then
+              cat "$PROMPT_SRC" | $OC run --command "$CMD" --model "$MODEL" --agent "$AGENT" > "$OUT"
+            else
+              $OC run --command "$CMD" --model "$MODEL" --agent "$AGENT" > "$OUT"
+            fi
+          elif [ -n "$PROMPT_SRC" ]; then
+            cat "$PROMPT_SRC" | $OC run --model "$MODEL" --agent "$AGENT" > "$OUT"
           else
             echo "Error: At least one of 'command', 'prompt', or 'prompt-file' must be provided" >&2
             exit 1
