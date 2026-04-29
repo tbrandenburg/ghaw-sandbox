@@ -1,4 +1,4 @@
 max_wip: 1
 model: opencode/big-pickle
-po_handle: "@change-me"          # GitHub handle for @mentions — set during bootstrap
+po_handle: "@tbrandenburg"       # GitHub handle for @mentions — set during bootstrap
 e2e_command: ""                  # Optional — empty = skip script, Demo Agent reasons instead
