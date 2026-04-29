@@ -80,5 +80,5 @@ If sub-tasks are discovered that are out of scope for this PR:
     gh issue create \
       --title "{sub-task title}" \
       --body "Discovered during implementation of #{number}.\n\n{description}" \
-      --label "severity:{val},priority:{val},complexity:{val},confidence:{val}"
+      --label "severity/{val},priority/{val},complexity/{val},confidence/{val}"
     gh issue comment {number} --body "🔍 Sub-task created: #{new-number}"

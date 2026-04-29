@@ -13,7 +13,7 @@ Review process:
 5. Create new issues for out-of-scope findings (pre-labelled)
 
 Decision:
-- ALL checks pass → gh pr review {pr} --approve + label issue as "reviewed"
+- ALL checks pass → add label "reviewed", remove "in-progress", comment tagging @{po_handle} for merge approval
 - Critical issues found → gh pr review {pr} --request-changes
 
 After approve: comment "@PO please approve for merge." tagging the configured PO handle.

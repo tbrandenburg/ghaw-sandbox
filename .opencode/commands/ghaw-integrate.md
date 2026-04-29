@@ -107,7 +107,7 @@ If the merge introduced a conflict or obvious breakage, evaluate:
       --body "⏸️ Merge deferred after conflict with previously merged PR #{earlier_pr}.
       Branch needs rebase. Dev Agent will pick up in next cycle."
     gh issue edit {linked-issue} \
-      --add-label "status:blocked" \
+      --add-label "blocked" \
       --remove-label "in-progress"
 
 ### 5d: Rollback decision

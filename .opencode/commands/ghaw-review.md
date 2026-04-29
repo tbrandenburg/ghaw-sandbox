@@ -50,14 +50,14 @@ For any issue found that is outside this PR's scope:
     gh issue create \
       --title "{finding title}" \
       --body "Found during review of PR #{pr}.\n\n{description}" \
-      --label "severity:{val},priority:{val},type:{bug|arch|feedback}"
+      --label "severity/{val},priority/{val},type/{bug|arch|feedback}"
 
 ### Step 5: Decision
 
 **If all checks pass:**
 
     gh issue edit {linked-issue-number} \
-      --add-label "status:reviewed" \
+      --add-label "reviewed" \
       --remove-label "in-progress"
     gh pr comment {pr} \
       --body "## Review Summary\n\n✅ Technical review passed. All acceptance criteria met and DoD satisfied.\n\n@{po_handle} — please review and approve this PR for merge when ready."

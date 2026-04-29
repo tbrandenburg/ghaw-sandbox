@@ -44,7 +44,7 @@ Structure the plan as:
     - {risk or open question}
 
     ### Estimated Complexity
-    {xs / s / m / l / xl} — {brief justification}
+    {high / medium / low} — {brief justification}
 
 ## Step 4: Post Plan + Set Labels
 
@@ -53,15 +53,16 @@ Post plan as issue comment with marker:
     gh issue comment $ARGUMENTS --body "<!-- PLAN -->
     {plan from Step 3}"
 
-Set all four labels (Fibonacci scale):
+Set all four labels:
 
     gh issue edit $ARGUMENTS \
-      --add-label "severity:{val}" \
-      --add-label "priority:{val}" \
-      --add-label "complexity:{val}" \
-      --add-label "confidence:{val}"
+      --add-label "severity/{val}" \
+      --add-label "priority/{val}" \
+      --add-label "complexity/{val}" \
+      --add-label "confidence/{val}"
 
 Label value mappings:
-- severity / priority: critical=13, high=8, medium=5, low=3, trivial=1
-- complexity:          xl=13, l=8, m=5, s=3, xs=1
-- confidence:          certain=13, high=8, medium=5, low=3, none=1
+- severity:   critical, high, medium, low
+- priority:   high, medium, low
+- complexity: high, medium, low
+- confidence: high, medium, low

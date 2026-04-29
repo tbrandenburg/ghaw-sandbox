@@ -32,9 +32,9 @@ For PRs in the input with reviewDecision=CHANGES_REQUESTED:
 For each ready issue with a confirmed <!-- PLAN --> comment:
 
 Score using Fibonacci values from labels:
-- severity_map: critical=13, high=8, medium=5, low=3, trivial=1
-- priority_map:  critical=13, high=8, medium=5, low=3, trivial=1
-- complexity_map: xl=13, l=8, m=5, s=3, xs=1
+- severity_map:  critical=13, high=8, medium=5, low=3
+- priority_map:  high=8, medium=5, low=3
+- complexity_map: high=8, medium=5, low=3
 
     WSJF = (severity + priority) / complexity
 
