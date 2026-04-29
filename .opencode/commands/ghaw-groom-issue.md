@@ -61,3 +61,12 @@ If severity or priority labels are incorrect based on current understanding:
     gh issue edit {number} \
       --add-label "severity/{new}" \
       --remove-label "severity/{old}"
+
+### Step 6: PO Handoff
+
+After completing all grooming checks, if the issue was NOT defocused and NOT flagged with unresolved questions:
+
+    gh issue comment {number} \
+      --body "✅ Grooming complete. Issue is clear, feasible, and correctly labelled.
+
+      @{po_handle} — please review and add the \`ready\` label to include this in the next sprint planning cycle."
