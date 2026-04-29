@@ -60,10 +60,13 @@ jobs:
 
       - name: Collect main branch state
         run: |
-          MAIN_TREE=$(git ls-tree -r --name-only HEAD | head -100)
           MAIN_SHA=$(git rev-parse HEAD)
           echo "MAIN_SHA=$MAIN_SHA" >> $GITHUB_ENV
-          echo "MAIN_TREE=$MAIN_TREE" >> $GITHUB_ENV
+          {
+            echo 'MAIN_TREE<<EOF'
+            git ls-tree -r --name-only HEAD | head -100
+            echo 'EOF'
+          } >> $GITHUB_ENV
 
       - name: Detect cross-PR file conflicts
         run: |
