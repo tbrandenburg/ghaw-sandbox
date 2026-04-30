@@ -84,7 +84,29 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Verify PR exists
+      - name: Verify PR exists for each candidate
         run: |
-          OPEN_PRS=$(gh pr list --repo ${{ github.repository }} --state open --json number,url)
-          echo "Open PRs after dev run: $OPEN_PRS" >> $GITHUB_STEP_SUMMARY
+          IN_PROGRESS=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label in-progress \
+            --json number,title)
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,body)
+
+          FAILED=0
+          for NUMBER in $(echo "$IN_PROGRESS" | jq -r '.[].number'); do
+            HAS_PR=$(echo "$OPEN_PRS" | jq --argjson n "$NUMBER" \
+              '[.[] | select(.body | test("Closes #\($n)"; "i"))] | length > 0')
+            if [ "$HAS_PR" = "true" ]; then
+              echo "✅ PR exists for issue #$NUMBER" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ No PR found for issue #$NUMBER" >> $GITHUB_STEP_SUMMARY
+              gh issue comment $NUMBER \
+                --repo ${{ github.repository }} \
+                --body "❌ Dev Agent ran but did not create a PR for this issue. Will retry on next cycle."
+              FAILED=1
+            fi
+          done
+          exit $FAILED
