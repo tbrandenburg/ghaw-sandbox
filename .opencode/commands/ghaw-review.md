@@ -50,7 +50,7 @@ For any issue found that is outside this PR's scope:
     gh issue create \
       --title "{finding title}" \
       --body "Found during review of PR #{pr}.\n\n{description}" \
-      --label "severity/{val},priority/{val},type/{bug|arch|feedback}"
+      --label "open,severity/{val},priority/{val},type/{bug|arch|feedback}"
 
 ### Step 5: Decision
 

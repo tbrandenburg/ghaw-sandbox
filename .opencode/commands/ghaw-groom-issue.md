@@ -27,7 +27,7 @@ If acceptance criteria are missing or ambiguous:
 
 If the issue is out-of-scope, not actionable, or duplicates another issue:
 
-    gh issue edit {number} --add-label "defocus"
+    gh issue edit {number} --add-label "defocus" --remove-label "open"
     gh issue comment {number} --body "⚠️ Grooming: Marked as defocus. Reason: {reason}"
 
 ### Step 3: Feasibility Review
@@ -70,7 +70,7 @@ Check the issue's `confidence` and `complexity` labels:
 
 - If `confidence/high` or `confidence/medium` **AND** `complexity/low` or `complexity/medium`:
 
-      gh issue edit {number} --add-label "ready"
+      gh issue edit {number} --add-label "ready" --remove-label "open"
       gh issue comment {number} \
         --body "✅ Grooming complete. Confidence and complexity qualify for automatic promotion.
         Issue has been marked \`ready\` for sprint planning."

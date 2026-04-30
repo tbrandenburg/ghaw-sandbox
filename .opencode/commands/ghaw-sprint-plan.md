@@ -51,7 +51,8 @@ Assign top N = MAX_WIP - CURRENT_WIP issues (skip if N <= 0):
 
     gh issue edit {number} \
       --add-label "in-progress" \
-      --remove-label "ready"
+      --remove-label "ready" \
+      --remove-label "open"
 
 ## Step 5: Summary
 
