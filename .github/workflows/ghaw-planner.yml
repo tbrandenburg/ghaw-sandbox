@@ -76,4 +76,7 @@ jobs:
               --body "❌ Planner Agent failed to create implementation plan."
             exit 1
           fi
+          gh issue edit $ISSUE_NUMBER \
+            --repo ${{ github.repository }} \
+            --add-label "open"
           echo "✅ Plan verified for issue #$ISSUE_NUMBER" >> $GITHUB_STEP_SUMMARY
