@@ -31,7 +31,7 @@ Create a new issue:
 
       ## Triggered by
       Closed issues: {list of relevant closed issue numbers}" \
-      --label "severity/{val},priority/{val},type/{bug|arch|feedback}"
+      --label "open,severity/{val},priority/{val},type/{bug|arch|feedback}"
 
 ## Step 2: Compare Against Sprint Goals
 
