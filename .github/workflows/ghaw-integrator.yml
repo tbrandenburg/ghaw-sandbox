@@ -164,7 +164,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Verify merge results
+      - name: Verify merge results and clean up state labels
         run: |
           STILL_OPEN=$(gh pr list \
             --repo ${{ github.repository }} \
@@ -172,6 +172,32 @@ jobs:
             --json number,reviewDecision \
             --jq '[.[] | select(.reviewDecision == "APPROVED")] | length')
           echo "Approved PRs still open after merge run: $STILL_OPEN" >> $GITHUB_STEP_SUMMARY
+
+          # For each recently merged PR, remove reviewed label from linked issue
+          MERGED=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state merged \
+            --limit 20 \
+            --json number,title,body,mergedAt)
+
+          echo "$MERGED" | jq -r '.[] | "\(.number) \(.body)"' | while read PR_NUM BODY; do
+            ISSUE_NUM=$(gh pr view $PR_NUM \
+              --repo ${{ github.repository }} \
+              --json body --jq '.body' \
+              | grep -oP '(?<=Closes #)\d+' | head -1)
+            [ -z "$ISSUE_NUM" ] && continue
+
+            HAS_REVIEWED=$(gh api repos/${{ github.repository }}/issues/$ISSUE_NUM \
+              --jq '[.labels[].name | select(. == "reviewed")] | length > 0' 2>/dev/null || echo "false")
+
+            if [ "$HAS_REVIEWED" = "true" ]; then
+              gh issue edit $ISSUE_NUM \
+                --repo ${{ github.repository }} \
+                --remove-label "reviewed"
+              echo "✅ Removed reviewed from #$ISSUE_NUM (PR #$PR_NUM merged)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
           gh pr list \
             --repo ${{ github.repository }} \
             --state merged \

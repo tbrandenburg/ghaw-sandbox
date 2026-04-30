@@ -117,6 +117,28 @@ jobs:
     needs: [prepare, run-sprint-planner]
     if: needs.prepare.outputs.has_candidates == 'true'
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Write summary
-        run: echo "✅ Sprint planning complete" >> $GITHUB_STEP_SUMMARY
+      - name: Apply state transitions from agent tags
+        run: |
+          # Find all issues where agent posted <state issue="N" set="in-progress"/>
+          ISSUES=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label ready \
+            --json number,comments)
+
+          for NUMBER in $(echo "$ISSUES" | jq -r '.[].number'); do
+            TAGGED=$(gh issue view $NUMBER \
+              --repo ${{ github.repository }} \
+              --json comments \
+              --jq '[.comments[].body | test("<state issue=\"'$NUMBER'\" set=\"in-progress\"/>")] | any')
+            if [ "$TAGGED" = "true" ]; then
+              gh issue edit $NUMBER \
+                --repo ${{ github.repository }} \
+                --add-label "in-progress" \
+                --remove-label "ready" \
+                --remove-label "open"
+              echo "✅ #$NUMBER → in-progress" >> $GITHUB_STEP_SUMMARY
+            fi
+          done

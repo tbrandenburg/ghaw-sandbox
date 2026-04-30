@@ -47,12 +47,14 @@ Post score comment:
 
 Sort issues by WSJF descending.
 
-Assign top N = MAX_WIP - CURRENT_WIP issues (skip if N <= 0):
+Assign top N = MAX_WIP - CURRENT_WIP issues (skip if N <= 0).
 
-    gh issue edit {number} \
-      --add-label "in-progress" \
-      --remove-label "ready" \
-      --remove-label "open"
+For each assigned issue, post the WSJF comment, then declare the assignment via a structured tag:
+
+    gh issue comment {number} \
+      --body "<state issue=\"{number}\" set=\"in-progress\"/>"
+
+Do NOT call `gh issue edit` for state labels — the workflow will handle the label update reliably.
 
 ## Step 5: Summary
 

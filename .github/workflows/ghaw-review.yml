@@ -97,11 +97,33 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Log review decisions
-        env:
-          PROMPT_DATA: ${{ needs.prepare.outputs.prompt }}
+      - name: Apply state transitions from agent tags
         run: |
-          for PR in $(echo "$PROMPT_DATA" | jq -r '.' | grep -oP '"number":\K\d+' | head -5); do
-            DECISION=$(gh pr view $PR --json reviewDecision -q .reviewDecision 2>/dev/null || echo "UNKNOWN")
-            echo "PR #$PR review decision: $DECISION" >> $GITHUB_STEP_SUMMARY
+          # For each reviewed PR, check if agent posted <state issue="N" set="reviewed"/>
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,body)
+
+          for PR in $(echo "$OPEN_PRS" | jq -r '.[].number'); do
+            ISSUE_NUM=$(gh pr view $PR \
+              --repo ${{ github.repository }} \
+              --json body --jq '.body' \
+              | grep -oP '(?<=Closes #)\d+' | head -1)
+            [ -z "$ISSUE_NUM" ] && continue
+
+            TAGGED=$(gh issue view $ISSUE_NUM \
+              --repo ${{ github.repository }} \
+              --json comments \
+              --jq "[.comments[].body | test(\"<state issue=\\\"$ISSUE_NUM\\\" set=\\\"reviewed\\\"/>\")] | any")
+
+            if [ "$TAGGED" = "true" ]; then
+              gh issue edit $ISSUE_NUM \
+                --repo ${{ github.repository }} \
+                --add-label "reviewed" \
+                --remove-label "in-progress"
+              echo "✅ #$ISSUE_NUM → reviewed (PR #$PR)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "PR #$PR review decision: $(gh pr view $PR --json reviewDecision -q .reviewDecision 2>/dev/null || echo 'UNKNOWN')" >> $GITHUB_STEP_SUMMARY
+            fi
           done

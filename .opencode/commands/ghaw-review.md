@@ -56,11 +56,10 @@ For any issue found that is outside this PR's scope:
 
 **If all checks pass:**
 
-    gh issue edit {linked-issue-number} \
-      --add-label "reviewed" \
-      --remove-label "in-progress"
     gh pr comment {pr} \
-      --body "## Review Summary\n\n✅ Technical review passed. All acceptance criteria met and DoD satisfied.\n\n@{po_handle} — please review and approve this PR for merge when ready."
+      --body "## Review Summary\n\n✅ Technical review passed. All acceptance criteria met and DoD satisfied.\n\n<state issue=\"{linked-issue-number}\" set=\"reviewed\"/>\n\n@{po_handle} — please review and approve this PR for merge when ready."
+
+Do NOT call `gh issue edit` for state labels — the workflow will handle the label update reliably.
 
 **If critical issues found:**
 

@@ -62,23 +62,13 @@ If severity or priority labels are incorrect based on current understanding:
       --add-label "severity/{new}" \
       --remove-label "severity/{old}"
 
-### Step 6: Ready Gate
+### Step 6: PO Handoff (if needed)
 
-After completing all grooming checks, if the issue was NOT defocused and NOT flagged with unresolved questions:
+After completing all grooming checks, if the issue was NOT defocused and NOT flagged with unresolved questions, and has `confidence/low` OR `complexity/high`:
 
-Check the issue's `confidence` and `complexity` labels:
+    gh issue comment {number} \
+      --body "✅ Grooming complete. Confidence or complexity requires PO review before sprint planning.
 
-- If `confidence/high` or `confidence/medium` **AND** `complexity/low` or `complexity/medium`:
+      @{po_handle} — please review and add the \`ready\` label when satisfied."
 
-      gh issue edit {number} --add-label "ready" --remove-label "open"
-      gh issue comment {number} \
-        --body "✅ Grooming complete. Confidence and complexity qualify for automatic promotion.
-        Issue has been marked \`ready\` for sprint planning."
-
-- Otherwise (confidence/low OR complexity/high):
-
-      gh issue comment {number} \
-        --body "✅ Grooming complete. Issue is clear and correctly labelled.
-
-        @{po_handle} — confidence or complexity requires your review before sprint planning.
-        Please add the \`ready\` label when satisfied."
+Do NOT call `gh issue edit` for `ready` or `open` labels — the workflow handles promotion reliably based on label data.

@@ -52,10 +52,40 @@ jobs:
     needs: [prepare, run-groomer]
     if: needs.prepare.outputs.has_issues == 'true'
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Write summary
+      - name: Apply ready promotion and write summary
         env:
           ISSUES_JSON: ${{ needs.prepare.outputs.issues_json }}
         run: |
           COUNT=$(echo "$ISSUES_JSON" | jq length)
           echo "✅ Groomed $COUNT issues" >> $GITHUB_STEP_SUMMARY
+
+          # Auto-promote to ready if confidence != low AND complexity != high
+          # Only for issues that are still open (not defocused) after grooming
+          for NUMBER in $(echo "$ISSUES_JSON" | jq -r '.[].number'); do
+            LABELS=$(gh api repos/${{ github.repository }}/issues/$NUMBER \
+              --jq '[.labels[].name]')
+
+            # Skip if defocused or already ready/in-progress
+            IS_DEFOCUS=$(echo "$LABELS" | jq 'contains(["defocus"])')
+            IS_READY=$(echo "$LABELS" | jq 'contains(["ready"])')
+            IS_WIP=$(echo "$LABELS" | jq 'contains(["in-progress"])')
+            [ "$IS_DEFOCUS" = "true" ] && continue
+            [ "$IS_READY" = "true" ] && continue
+            [ "$IS_WIP" = "true" ] && continue
+
+            HAS_LOW_CONF=$(echo "$LABELS" | jq 'contains(["confidence/low"])')
+            HAS_HIGH_COMP=$(echo "$LABELS" | jq 'contains(["complexity/high"])')
+
+            if [ "$HAS_LOW_CONF" = "false" ] && [ "$HAS_HIGH_COMP" = "false" ]; then
+              gh issue edit $NUMBER \
+                --repo ${{ github.repository }} \
+                --add-label "ready" \
+                --remove-label "open"
+              echo "✅ #$NUMBER → ready (auto-promoted)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⏳ #$NUMBER → PO handoff required (confidence/low or complexity/high)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done

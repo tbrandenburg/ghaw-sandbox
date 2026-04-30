@@ -95,9 +95,7 @@ Then merge, including `Closes #N` in the squash commit body so GitHub auto-close
       --subject "{type}: {title} (#{number})" \
       --body "Closes #${ISSUE_NUM}"
 
-Remove the `reviewed` label from the linked issue (GitHub closes it, but clean up state label):
-
-    gh issue edit ${ISSUE_NUM} --remove-label "reviewed"
+The workflow will reliably remove the `reviewed` label after confirming the merge.
 
 ### 5c: Post-merge verification
 
