@@ -120,25 +120,47 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Apply state transitions from agent tags
+      - name: Checkout (for config.yml)
+        uses: actions/checkout@v4
+
+      - name: Install yq
         run: |
-          # Find all issues where agent posted <state issue="N" set="in-progress"/>
-          ISSUES=$(gh issue list \
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Assign sprint from WSJF scores
+        run: |
+          MAX_WIP=$(yq '.max_wip' .github/config/config.yml)
+          CURRENT_WIP=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label in-progress \
+            --json number | jq length)
+          SLOTS=$(( MAX_WIP - CURRENT_WIP ))
+          echo "WIP slots available: $SLOTS" >> $GITHUB_STEP_SUMMARY
+          [ "$SLOTS" -le "0" ] && echo "WIP limit reached — no assignments." >> $GITHUB_STEP_SUMMARY && exit 0
+
+          # Collect ready issues and their WSJF scores from comments
+          READY=$(gh issue list \
             --repo ${{ github.repository }} \
             --label ready \
             --json number,comments)
 
-          for NUMBER in $(echo "$ISSUES" | jq -r '.[].number'); do
-            TAGGED=$(gh issue view $NUMBER \
+          # Extract WSJF score from "📊 WSJF: {score}" comment, default 0
+          SCORED=$(echo "$READY" | jq '[.[] | {
+            number: .number,
+            wsjf: (
+              [.comments[].body | capture("WSJF: (?P<s>[0-9.]+)").s // "0"] | last | tonumber
+            )
+          }] | sort_by(-.wsjf)')
+
+          ASSIGNED=0
+          for NUMBER in $(echo "$SCORED" | jq -r '.[].number'); do
+            [ "$ASSIGNED" -ge "$SLOTS" ] && break
+            gh issue edit $NUMBER \
               --repo ${{ github.repository }} \
-              --json comments \
-              --jq '[.comments[].body | test("<state issue=\"'$NUMBER'\" set=\"in-progress\"/>")] | any')
-            if [ "$TAGGED" = "true" ]; then
-              gh issue edit $NUMBER \
-                --repo ${{ github.repository }} \
-                --add-label "in-progress" \
-                --remove-label "ready" \
-                --remove-label "open"
-              echo "✅ #$NUMBER → in-progress" >> $GITHUB_STEP_SUMMARY
-            fi
+              --add-label "in-progress" \
+              --remove-label "ready" \
+              --remove-label "open"
+            echo "✅ #$NUMBER → in-progress" >> $GITHUB_STEP_SUMMARY
+            ASSIGNED=$(( ASSIGNED + 1 ))
           done

@@ -97,13 +97,12 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Apply state transitions from agent tags
+      - name: Apply state transitions based on review outcome
         run: |
-          # For each reviewed PR, check if agent posted <state issue="N" set="reviewed"/>
           OPEN_PRS=$(gh pr list \
             --repo ${{ github.repository }} \
             --state open \
-            --json number,body)
+            --json number,body,reviewDecision)
 
           for PR in $(echo "$OPEN_PRS" | jq -r '.[].number'); do
             ISSUE_NUM=$(gh pr view $PR \
@@ -112,18 +111,18 @@ jobs:
               | grep -oP '(?<=Closes #)\d+' | head -1)
             [ -z "$ISSUE_NUM" ] && continue
 
-            TAGGED=$(gh issue view $ISSUE_NUM \
-              --repo ${{ github.repository }} \
-              --json comments \
-              --jq "[.comments[].body | test(\"<state issue=\\\"$ISSUE_NUM\\\" set=\\\"reviewed\\\"/>\")] | any")
+            # Check if agent posted a passing review summary on this PR
+            PASSED=$(gh api repos/${{ github.repository }}/issues/$PR/comments \
+              --jq '[.[] | select(.body | contains("✅ Technical review passed"))] | length > 0')
 
-            if [ "$TAGGED" = "true" ]; then
+            if [ "$PASSED" = "true" ]; then
               gh issue edit $ISSUE_NUM \
                 --repo ${{ github.repository }} \
                 --add-label "reviewed" \
                 --remove-label "in-progress"
               echo "✅ #$ISSUE_NUM → reviewed (PR #$PR)" >> $GITHUB_STEP_SUMMARY
             else
-              echo "PR #$PR review decision: $(gh pr view $PR --json reviewDecision -q .reviewDecision 2>/dev/null || echo 'UNKNOWN')" >> $GITHUB_STEP_SUMMARY
+              DECISION=$(gh pr view $PR --json reviewDecision --jq '.reviewDecision')
+              echo "PR #$PR: no passing review detected (decision: $DECISION)" >> $GITHUB_STEP_SUMMARY
             fi
           done

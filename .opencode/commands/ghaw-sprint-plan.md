@@ -47,14 +47,12 @@ Post score comment:
 
 Sort issues by WSJF descending.
 
-Assign top N = MAX_WIP - CURRENT_WIP issues (skip if N <= 0).
-
-For each assigned issue, post the WSJF comment, then declare the assignment via a structured tag:
+For the top N = MAX_WIP - CURRENT_WIP issues (skip if N <= 0), post a comment confirming assignment:
 
     gh issue comment {number} \
-      --body "<state issue=\"{number}\" set=\"in-progress\"/>"
+      --body "🚀 Assigned to sprint (WSJF rank: {rank}/{total})."
 
-Do NOT call `gh issue edit` for state labels — the workflow will handle the label update reliably.
+Do NOT call `gh issue edit` for state labels — the workflow assigns `in-progress` reliably based on WSJF scores.
 
 ## Step 5: Summary
 
