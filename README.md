@@ -9,13 +9,12 @@
 ## Table of Contents
 
 - [Quick Start](#quick-start)
-- [Prerequisites](#prerequisites)
+- [Requirements](#requirements)
 - [How It Works](#how-it-works)
 - [Agents](#agents)
 - [Architecture](#architecture)
 - [Label Taxonomy](#label-taxonomy)
 - [Makefile.ghaw Targets](#makefileghaw-targets)
-- [Requirements](#requirements)
 
 ---
 
@@ -63,19 +62,26 @@ Open a GitHub issue — the Planner Agent will automatically analyse it and prod
 
 ---
 
-## Prerequisites
+## Requirements
 
-Before installing GHAW, ensure the following are available:
+Before installing and running GHAW, ensure the following are in place:
+
+### Before Installing
 
 | Requirement | Purpose |
 | --- | --- |
-| **GitHub repository** with Actions enabled | Runtime environment for all agents |
 | **`gh` CLI** installed and authenticated (`gh auth login`) | Required by Makefile.ghaw for label setup and repo detection |
 | **`jq`** installed | JSON processing in the Makefile |
 | **`python3`** installed | URL encoding and label management in the Makefile |
-| **Read/write Actions permissions** | Allows agents to edit issues, create PRs, and push commits |
 
 > **Note:** No external API keys or secrets are required — the model (`opencode/big-pickle`) runs on the free tier.
+
+### Runtime
+
+| Requirement | Details |
+| --- | --- |
+| **GitHub repository** with Actions enabled | All agents run as GitHub Actions workflows |
+| **`GITHUB_TOKEN`** with read/write permissions | Provided automatically by GitHub Actions — enable under Settings → Actions → General |
 
 ---
 
@@ -152,13 +158,3 @@ Labels are created by running `make -f Makefile.ghaw setup-labels`. Without them
 | `clean` | Remove all installed GHAW files |
 | `info` | Show installed version and current config |
 | `publish` | Bump version, create a git tag, and publish a GitHub release |
-
----
-
-## Requirements
-
-| Requirement | Details |
-| --- | --- |
-| GitHub repository with Actions enabled | All agents run as GitHub Actions workflows |
-| `GITHUB_TOKEN` with read/write permissions | Provided automatically by GitHub Actions |
-| No external secrets needed | The default model runs on the free tier |
