@@ -149,7 +149,7 @@ jobs:
           SCORED=$(echo "$READY" | jq '[.[] | {
             number: .number,
             wsjf: (
-              [.comments[].body | capture("WSJF: (?P<s>[0-9.]+)").s // "0"] | last | tonumber
+              [.comments[].body | capture("WSJF: (?<s>[0-9.]+)").s // "0"] | last | tonumber
             )
           }] | sort_by(-.wsjf)')
 
