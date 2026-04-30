@@ -3,15 +3,44 @@ name: GHAW - Planner Agent
 on:
   issues:
     types: [opened]
+  schedule:
+    - cron: '0 6 * * *'    # 06:00 UTC daily — catch issues created by agents
   workflow_dispatch:
     inputs:
       issue_number:
-        description: 'Issue number to plan'
-        required: true
+        description: 'Issue number to plan (leave empty to scan all unplanned issues)'
+        required: false
         type: number
 
 jobs:
+  # ── Batch mode: scan all open issues without a plan (cron / empty dispatch) ──
+  scan-unplanned:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.issue_number == '')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Find and dispatch planner for each unplanned issue
+        run: |
+          ISSUES=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --limit 100 \
+            --json number,comments)
+
+          for NUMBER in $(echo "$ISSUES" | jq -r '.[] | select(
+            ([.comments[].body | contains("<!-- PLAN -->")] | any) == false
+          ) | .number'); do
+            echo "Dispatching planner for issue #$NUMBER"
+            gh workflow run ghaw-planner.yml \
+              --repo ${{ github.repository }} \
+              -f issue_number=$NUMBER
+            sleep 2
+          done
+
+  # ── Single-issue mode: issues: opened or workflow_dispatch with issue_number ──
   check-plan-needed:
+    if: github.event_name == 'issues' || (github.event_name == 'workflow_dispatch' && inputs.issue_number != '')
     runs-on: ubuntu-latest
     outputs:
       issue_number: ${{ steps.check.outputs.issue_number }}
