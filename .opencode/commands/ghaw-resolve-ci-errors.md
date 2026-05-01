@@ -52,4 +52,4 @@ If the CI failure reveals a deeper problem that requires a separate fix:
     gh issue create \
       --title "CI: {discovered issue title}" \
       --body "Discovered while fixing CI on PR #{pr}.\n\n{description}" \
-      --label "severity/{val},priority/{val},type/bug"
+      --label "open,severity/{val},priority/{val},type/bug"

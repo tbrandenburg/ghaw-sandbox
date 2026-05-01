@@ -115,9 +115,8 @@ If the merge introduced a conflict or obvious breakage, evaluate:
     gh pr comment {number} \
       --body "⏸️ Merge deferred after conflict with previously merged PR #{earlier_pr}.
       Branch needs rebase. Dev Agent will pick up in next cycle."
-    gh issue edit {linked-issue} \
-      --add-label "blocked" \
-      --remove-label "in-progress"
+
+Do NOT call `gh issue edit` for state labels — the workflow detects the deferral comment and applies `blocked` reliably.
 
 ### 5d: Rollback decision
 

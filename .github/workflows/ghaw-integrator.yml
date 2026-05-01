@@ -198,6 +198,30 @@ jobs:
             fi
           done
 
+          # Detect deferred PRs (agent posted ⏸️ Merge deferred) and apply blocked label
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,body)
+
+          for PR_NUM in $(echo "$OPEN_PRS" | jq -r '.[].number'); do
+            DEFERRED=$(gh api repos/${{ github.repository }}/issues/$PR_NUM/comments \
+              --jq '[.[] | select(.body | contains("⏸️ Merge deferred"))] | length > 0')
+            [ "$DEFERRED" != "true" ] && continue
+
+            ISSUE_NUM=$(gh pr view $PR_NUM \
+              --repo ${{ github.repository }} \
+              --json body --jq '.body' \
+              | grep -oP '(?<=Closes #)\d+' | head -1)
+            [ -z "$ISSUE_NUM" ] && continue
+
+            gh issue edit $ISSUE_NUM \
+              --repo ${{ github.repository }} \
+              --add-label "blocked" \
+              --remove-label "in-progress"
+            echo "⏸️ #$ISSUE_NUM → blocked (PR #$PR_NUM deferred)" >> $GITHUB_STEP_SUMMARY
+          done
+
           gh pr list \
             --repo ${{ github.repository }} \
             --state merged \
