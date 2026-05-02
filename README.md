@@ -1,6 +1,6 @@
 # GHAW — GitHub Agentic Workflow
 
-[![Version](https://img.shields.io/github/v/tag/tbrandenburg/ghaw-sandbox?label=version&sort=semver)]()
+[![Version](https://img.shields.io/github/v/tag/tbrandenburg/ghaw-sandbox?label=version&sort=semver)](https://github.com/tbrandenburg/ghaw-sandbox/releases)
 
 > GHAW is a GitHub Actions-based agentic workflow that autonomously manages your issue backlog — from planning and implementation through review and merge — using AI agents that run on every schedule trigger.
 
