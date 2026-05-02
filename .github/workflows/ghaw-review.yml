@@ -97,6 +97,8 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Apply state transitions based on review outcome
         run: |
           OPEN_PRS=$(gh pr list \
