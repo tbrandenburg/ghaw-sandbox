@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: pip install --quiet yamllint
+
+      - name: Install actionlint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash
+
+      - name: Install markdownlint
+        run: npm install -g markdownlint-cli
+
+      - name: Run yamllint
+        run: yamllint -c .yamllint.yml .github/
+
+      - name: Run actionlint
+        run: ./actionlint -shellcheck= .github/workflows/*.yml
+
+      - name: Run markdownlint
+        run: markdownlint --config .markdownlint.json "**/*.md" --ignore node_modules
