@@ -92,6 +92,8 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Verify plan was created
         run: |
           ISSUE_NUMBER=${{ needs.check-plan-needed.outputs.issue_number }}
