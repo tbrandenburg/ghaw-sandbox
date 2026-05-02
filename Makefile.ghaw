@@ -26,6 +26,7 @@
 ##   make -f Makefile.ghaw clean             # Remove all installed files
 ##   make -f Makefile.ghaw info              # Show version + config
 ##   make -f Makefile.ghaw publish           # Bump version + tag + release
+##   make -f Makefile.ghaw initial-release   # Create release for current version (no bump)
 ##
 ## OPTIONS:
 ##   REPO=owner/name       Override repo (default: auto-detected via gh)
@@ -271,7 +272,7 @@ endef
 # =============================================================================
 
 .PHONY: install install-force install-dry setup-labels setup-labels-dry \
-        list-labels clean info publish
+        list-labels clean info publish initial-release
 
 ## Install all GHAW files (skip existing)
 install:
@@ -505,3 +506,27 @@ publish:
 	git push && git push --tags; \
 	gh release create "v$$NEW_VERSION" --generate-notes; \
 	echo "✅ Released v$$NEW_VERSION"
+
+## Create GitHub release for current version (no bump)
+initial-release:
+	@$(REQUIRE_TOOLS)
+	@$(REQUIRE_REPO)
+	@echo "Creating initial release for version: $(GHAW_VERSION)"
+	@if git rev-parse "v$(GHAW_VERSION)" >/dev/null 2>&1; then \
+	  echo "⚠️  Tag v$(GHAW_VERSION) already exists locally"; \
+	else \
+	  git tag "v$(GHAW_VERSION)"; \
+	  echo "✅ Created tag v$(GHAW_VERSION)"; \
+	fi
+	@if git ls-remote --tags origin "v$(GHAW_VERSION)" | grep -q "v$(GHAW_VERSION)"; then \
+	  echo "⚠️  Tag v$(GHAW_VERSION) already exists on remote"; \
+	else \
+	  git push --tags; \
+	  echo "✅ Pushed tags to remote"; \
+	fi
+	@if gh release view "v$(GHAW_VERSION)" >/dev/null 2>&1; then \
+	  echo "⚠️  Release v$(GHAW_VERSION) already exists — skipping"; \
+	else \
+	  gh release create "v$(GHAW_VERSION)" --generate-notes --title "v$(GHAW_VERSION)"; \
+	  echo "✅ Released v$(GHAW_VERSION)"; \
+	fi
