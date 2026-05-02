@@ -1,0 +1,4 @@
+# Runtime artifacts from GHAW agent pipeline
+_prompt.txt
+*-agent-results.txt
+dev-agent-results.txt
