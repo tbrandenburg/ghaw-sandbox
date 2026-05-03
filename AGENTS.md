@@ -22,7 +22,7 @@ Agents run via OpenCode in GitHub Actions workflows.
 
 ## Project Structure
 
-```
+```text
 .github/workflows/    → Agent workflows (Bash Prep → OpenCode Run → Bash Verify)
 .github/config/       → Runtime config (config.yml)
 .opencode/agents/     → Agent definitions (planner.md, dev.md, etc.)
