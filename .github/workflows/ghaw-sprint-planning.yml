@@ -2,7 +2,7 @@ name: GHAW - Sprint Planning Agent
 
 on:
   schedule:
-    - cron: '0 7 * * *'    # 07:00 UTC daily (after BGA 50min window)
+    - cron: '0 5 * * *'    # 05:00 UTC daily (after BGA 50min window)
   workflow_dispatch:
 
 jobs:
