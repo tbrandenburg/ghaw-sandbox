@@ -130,16 +130,30 @@ If a merge causes a regression that blocks subsequent merges AND cannot be resol
 
 ## Step 6: Final Summary
 
-After all merges (and deferrals) are processed, post a summary:
+After all merges (and deferrals) are processed, write the summary to the GitHub Actions job
+summary and post it as a comment on the last merged PR.
 
-    gh api repos/${{ github.repository }}/issues \
-      --field title="Merge Run Summary — {date}" \
-      --field body="## Merge Orchestration Summary
+**6a: GitHub Actions job summary** (always):
+
+    cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+    ## Merge Orchestration Summary
+
+    **Merged ({N}):** {list of PR numbers and titles}
+    **Deferred ({M}):** {list with reasons}
+    **Reverted ({K}):** {list with reasons}
+
+    **Next recommended action:** {e.g. 'PR #22 needs rebase', 'CI confirming #15 and #17'}
+    EOF
+
+**6b: PR comment on the last merged PR** (always; skip only if no PR was merged):
+
+    gh pr comment {last_merged_pr} \
+      --body "## Merge Orchestration Summary
 
       **Merged ({N}):** {list of PR numbers and titles}
       **Deferred ({M}):** {list with reasons}
       **Reverted ({K}):** {list with reasons}
 
-      Next recommended action: {e.g. 'PR #22 needs rebase', 'CI confirming #15 and #17'}"
+      **Next recommended action:** {e.g. 'PR #22 needs rebase', 'CI confirming #15 and #17'}"
 
-Or post as a comment on the last merged PR if no issues are appropriate.
+Do NOT create a GitHub issue for the summary.
