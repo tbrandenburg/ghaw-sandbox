@@ -498,7 +498,16 @@ info:
 publish:
 	@$(REQUIRE_TOOLS)
 	@echo "Current version: $(GHAW_VERSION)"
-	@echo -n "New version: "; read NEW_VERSION; \
+	@LAST_TAG=$$(git describe --tags --abbrev=0 2>/dev/null || echo ""); \
+	if [ -n "$$LAST_TAG" ]; then \
+		COMMIT_COUNT=$$(git rev-list --count $$LAST_TAG..HEAD 2>/dev/null || echo "0"); \
+		if [ "$$COMMIT_COUNT" -eq "0" ]; then \
+			echo "❌ ERROR: No new commits since last release $$LAST_TAG. Nothing to publish."; \
+			echo "   Make commits to main before publishing a new release."; \
+			exit 1; \
+		fi; \
+	fi; \
+	echo -n "New version: "; read NEW_VERSION; \
 	echo "$$NEW_VERSION" > .ghaw-version; \
 	git add .ghaw-version; \
 	git commit -m "chore: bump version to $$NEW_VERSION"; \
