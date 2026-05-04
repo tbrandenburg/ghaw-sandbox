@@ -83,17 +83,13 @@ If BEHIND: update the branch
 
 ### 5b: Merge
 
-Extract the linked issue number from the PR body before merging:
-
-    ISSUE_NUM=$(gh pr view {number} --json body --jq '.body' | grep -oP '(?<=Closes #)\d+' | head -1)
-
-Then merge, including `Closes #N` in the squash commit body so GitHub auto-closes the issue:
+Merge using merge-commit strategy to preserve full git history from the PR branch.
+GitHub automatically closes issues referenced with `Closes #N` in the PR body.
 
     gh pr merge {number} \
-      --squash \
+      --merge \
       --delete-branch \
-      --subject "{type}: {title} (#{number})" \
-      --body "Closes #${ISSUE_NUM}"
+      --subject "{type}: {title} (#{number})"
 
 The workflow will reliably remove the `reviewed` label after confirming the merge.
 
@@ -122,7 +118,7 @@ Do NOT call `gh issue edit` for state labels — the workflow detects the deferr
 
 If a merge causes a regression that blocks subsequent merges AND cannot be resolved inline:
 
-    git revert HEAD --no-edit
+    git revert -m 1 HEAD --no-edit
     git push origin main
     gh pr comment {number} \
       --body "🔙 Merge of PR #{number} reverted — caused regression affecting {subsequent-prs}.
