@@ -19,3 +19,7 @@ For sprint planning:
 
 Do not implement anything. Plan and assign only.
 Act directly via gh CLI — no structured return value needed.
+
+**Critical output contract**: When posting an implementation plan as an issue comment, the comment
+body MUST start with `<!-- PLAN -->` on the very first line. The verify step checks for this exact
+HTML comment — if it is missing or placed anywhere other than the first line, the workflow fails.
