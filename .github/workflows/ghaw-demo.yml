@@ -2,7 +2,7 @@ name: GHAW - Demo Agent
 
 on:
   schedule:
-    - cron: '0 20 * * *'   # 20:00 UTC daily
+    - cron: '0 5,11,17,23 * * *'   # Every 6h at :05 (5h after grooming)
   workflow_dispatch:
 
 jobs:

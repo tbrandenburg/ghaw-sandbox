@@ -4,7 +4,7 @@ on:
   issues:
     types: [opened]
   schedule:
-    - cron: '0 3 * * *'    # 03:00 UTC daily — catch issues created by agents
+    - cron: '0 0,6,12,18 * * *'    # Every 6h at :00 (cycle start, alongside grooming)
   workflow_dispatch:
     inputs:
       issue_number:

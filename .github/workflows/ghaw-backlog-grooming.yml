@@ -2,7 +2,7 @@ name: GHAW - Backlog Grooming Agent
 
 on:
   schedule:
-    - cron: '0 4 * * *'    # 04:00 UTC daily
+    - cron: '0 0,6,12,18 * * *'    # Every 6h at :00 (cycle start)
   workflow_dispatch:
 
 jobs:
