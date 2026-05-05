@@ -10,6 +10,7 @@ argument-hint: <merge-context-json>
 ## Step 1: Parse and Understand All Candidates
 
 Read the full input. For each approved PR extract:
+
 - PR number, title, linked issue
 - Files changed (from diff context)
 - Issue labels: severity, priority, complexity
@@ -22,6 +23,7 @@ Build a mental model of the full candidate set before making any decisions.
 Analyse which PRs have logical dependencies on each other:
 
 **Signals to look for:**
+
 - PR B's issue description says "depends on #N" or "builds on PR #M"
 - PR A introduces a new function/type/interface that PR B imports or calls
 - PR A creates a file that PR B modifies
@@ -36,6 +38,7 @@ For each conflict risk found:
 ## Step 3: Risk Classification
 
 Classify each PR as:
+
 - **LOW** — isolated change (docs, tests, single-file feature in non-core area)
 - **MEDIUM** — moderate change (multi-file, touches shared utilities)
 - **HIGH** — architectural (schema changes, interface changes, core system refactor, large diff)
@@ -104,6 +107,7 @@ After each merge, verify the build is not broken:
 If the merge introduced a conflict or obvious breakage, evaluate:
 
 **Option A — Resolve inline:**
+
 - Checkout branch, resolve conflict manually, push, re-merge
 
 **Option B — Defer PR:**
