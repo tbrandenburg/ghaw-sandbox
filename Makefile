@@ -26,7 +26,11 @@ lint-yaml:
 ## lint-actions: Validate GitHub Actions workflows with actionlint
 lint-actions:
 	@echo "--- actionlint ---"
-	$(ACTIONLINT) -shellcheck= .github/workflows/*.yml
+	@if [ -f $(ACTIONLINT) ]; then \
+		$(ACTIONLINT) -shellcheck= .github/workflows/*.yml; \
+	else \
+		echo "⚠️  Skipping actionlint — binary not found. Run 'make install' to install."; \
+	fi
 
 ## lint-markdown: Validate Markdown files with markdownlint
 lint-markdown:
