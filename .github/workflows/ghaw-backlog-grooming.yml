@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: '0 0,6,12,18 * * *'    # Every 6h at :00 (cycle start)
   workflow_dispatch:
+  issues:
+    types: [unlabeled]              # Re-assess when confidence/low is removed by PO
 
 jobs:
   prepare:
@@ -17,12 +19,26 @@ jobs:
       - name: Fetch open issues
         id: fetch
         run: |
-          # Top 10 oldest-updated open issues with severity or priority labels
-          ISSUES=$(gh issue list \
-            --repo ${{ github.repository }} \
-            --state open \
-            --json number,title,body,labels,comments,updatedAt \
-            --jq 'sort_by(.updatedAt) | .[0:10]')
+          # If triggered by label removal, re-assess only that issue (if confidence/low was removed)
+          if [[ "${{ github.event_name }}" == "issues" ]]; then
+            REMOVED_LABEL="${{ github.event.label.name }}"
+            if [[ "$REMOVED_LABEL" != "confidence/low" ]]; then
+              echo "has_issues=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+            ISSUES=$(gh issue view "$ISSUE_NUMBER" \
+              --repo ${{ github.repository }} \
+              --json number,title,body,labels,comments,updatedAt \
+              --jq '[.]')
+          else
+            # Top 10 oldest-updated open issues
+            ISSUES=$(gh issue list \
+              --repo ${{ github.repository }} \
+              --state open \
+              --json number,title,body,labels,comments,updatedAt \
+              --jq 'sort_by(.updatedAt) | .[0:10]')
+          fi
 
           COUNT=$(echo "$ISSUES" | jq length)
           if [ "$COUNT" = "0" ]; then

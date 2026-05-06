@@ -21,7 +21,10 @@ If acceptance criteria are missing or ambiguous:
       --body "❓ Grooming: Acceptance criteria unclear. Please clarify:
       - {question 1}
       - {question 2}
-      cc: @{po_handle}"
+
+      @{po_handle} — please reply to this comment with your answers, then remove the \`confidence/low\` label to trigger re-assessment."
+
+    gh issue edit {number} --add-label "confidence/low"
 
 ### Step 2: Defocus Check
 
