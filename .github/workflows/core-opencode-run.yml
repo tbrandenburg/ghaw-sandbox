@@ -91,12 +91,7 @@ jobs:
 
             if ! curl -fsSL ${{ env.OPENCODE_INSTALL_URL }} | bash; then
               echo "ERROR: OpenCode installation failed"
-              echo "Trying alternative installation method..."
-
-              if ! curl -fsSL ${{ env.OPENCODE_INSTALL_URL }} | bash; then
-                echo "ERROR: Alternative installation also failed"
-                exit 1
-              fi
+              exit 1
             fi
 
             echo "OpenCode installation completed"
