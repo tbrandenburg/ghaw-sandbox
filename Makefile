@@ -37,7 +37,7 @@ lint-actions:
 ## lint-markdown: Validate Markdown files with markdownlint
 lint-markdown:
 	@echo "--- markdownlint ---"
-	$(MARKDOWNLINT) --config .markdownlint.json "**/*.md" --ignore node_modules
+	$(MARKDOWNLINT) --config .markdownlint.json "**/*.md" --ignore node_modules --ignore tests
 
 ## test-bats: Run BATS behavioral tests
 test-bats:

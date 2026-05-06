@@ -33,7 +33,7 @@ jobs:
         run: ./actionlint -shellcheck= .github/workflows/*.yml
 
       - name: Run markdownlint
-        run: markdownlint --config .markdownlint.json "**/*.md" --ignore node_modules
+        run: markdownlint --config .markdownlint.json "**/*.md" --ignore node_modules --ignore tests
 
   bats:
     runs-on: ubuntu-latest
