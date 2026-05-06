@@ -4,13 +4,14 @@ YAMLLINT    := yamllint
 ACTIONLINT  := ./actionlint
 MARKDOWNLINT := markdownlint
 
-## install: Install required lint tools
+## install: Install required lint tools and configure git hooks
 install:
 	pip install --quiet yamllint
 	npm install -g markdownlint-cli
 	@if [ ! -f ./actionlint ]; then \
 		curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash; \
 	fi
+	@$(MAKE) hooks
 
 ## test: Run all linters
 test: lint
@@ -37,9 +38,8 @@ lint-markdown:
 	@echo "--- markdownlint ---"
 	$(MARKDOWNLINT) --config .markdownlint.json "**/*.md" --ignore node_modules
 
-## hooks: Install git hooks
+## hooks: Configure git to use .githooks directory
 hooks:
-	@echo "Installing pre-push hook..."
-	@cp .githooks/pre-push .git/hooks/pre-push
-	@chmod +x .git/hooks/pre-push
+	@echo "Configuring git hooks path..."
+	@git config core.hooksPath .githooks
 	@echo "Done."
