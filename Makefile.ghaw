@@ -76,6 +76,7 @@ GHAW_FILES := \
 	.opencode/commands/ghaw-integrate.md \
 	.opencode/commands/ghaw-demo.md \
 	DEFINITION_OF_DONE.md \
+	RELEASE_NOTES.md \
 	.githooks/pre-push
 
 # =============================================================================
@@ -517,7 +518,7 @@ publish:
 	git commit -m "chore: bump version to $$NEW_VERSION"; \
 	git tag "v$$NEW_VERSION"; \
 	git push && git push --tags; \
-	gh release create "v$$NEW_VERSION" --generate-notes; \
+	gh release create "v$$NEW_VERSION" -F RELEASE_NOTES.md; \
 	echo "✅ Released v$$NEW_VERSION"
 
 ## Create GitHub release for current version (no bump)
@@ -540,6 +541,6 @@ initial-release:
 	@if gh release view "v$(GHAW_VERSION)" >/dev/null 2>&1; then \
 	  echo "⚠️  Release v$(GHAW_VERSION) already exists — skipping"; \
 	else \
-	  gh release create "v$(GHAW_VERSION)" --generate-notes --title "v$(GHAW_VERSION)"; \
+	  gh release create "v$(GHAW_VERSION)" -F RELEASE_NOTES.md --title "v$(GHAW_VERSION)"; \
 	  echo "✅ Released v$(GHAW_VERSION)"; \
 	fi
