@@ -3,7 +3,7 @@
 YAMLLINT    := yamllint
 ACTIONLINT  := ./actionlint
 MARKDOWNLINT := markdownlint
-BATS        := $(shell command -v bats 2>/dev/null || echo "./tests/bats/bin/bats")
+BATS        := $(shell command -v bats 2>/dev/null || echo "./tests/bin/bats")
 
 ## install: Install required lint tools and configure git hooks
 install:

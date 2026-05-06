@@ -49,8 +49,28 @@ When sequencing, apply these heuristics in order:
    tiebreaker (higher score = higher priority)
 5. **Age** — Older PRs first when everything else is equal (avoids starvation)
 
+## Pre-Merge Eligibility Check
+
+Before merging any PR, you MUST verify it is eligible. A PR is **ineligible** if any of
+the following are true:
+
+- It has one or more reviews with state `CHANGES_REQUESTED` — defer it and comment why
+- It has no approving reviews (unless it is a trivial doc/chore PR explicitly noted as
+  self-merge approved)
+- Its `mergeStateStatus` is `BLOCKED` or `DIRTY`
+
+Check review state with:
+```bash
+gh pr view <number> --json reviews --jq '.reviews[] | select(.state == "CHANGES_REQUESTED") | .author.login'
+```
+
+If this returns any output, **do not merge**. Comment on the PR:
+> Deferred by integrator: PR has outstanding `CHANGES_REQUESTED` review from @{author}.
+> Resolve the review before this PR can be merged.
+
 ## What You Must NOT Do
 
+- Do not merge a PR that has `CHANGES_REQUESTED` reviews — always check before merging
 - Do not merge a PR that has merge conflicts with main without first attempting resolution
 - Do not merge PRs in parallel — always sequential to avoid race conditions
 - Do not ignore `mergeStateStatus: BEHIND` — update the branch first before merging

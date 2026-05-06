@@ -34,3 +34,17 @@ jobs:
 
       - name: Run markdownlint
         run: markdownlint --config .markdownlint.json "**/*.md" --ignore node_modules
+
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install bats
+        run: |
+          curl -sSfL https://github.com/bats-core/bats-core/archive/refs/tags/v1.11.1.tar.gz | \
+          tar xz -C tests --strip-components=1 bats-core-1.11.1
+
+      - name: Run BATS tests
+        run: ./tests/bin/bats tests/
