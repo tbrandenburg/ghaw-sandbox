@@ -25,13 +25,27 @@ jobs:
           OPEN_PRS=$(gh pr list \
             --repo ${{ github.repository }} \
             --state open \
-            --json number,headRefName,statusCheckRollup,reviews,body,title)
+            --json number,headRefName,statusCheckRollup,reviews,commits,body,title,reviewDecision)
 
-          # No failing checks + no reviews yet (empty checks = no CI = ok to review)
-          CANDIDATES=$(echo "$OPEN_PRS" | jq '[.[] | select(
+          # Case 1: PRs with no reviews yet and no failing CI → first review
+          FIRST_REVIEW=$(echo "$OPEN_PRS" | jq '[.[] | select(
             (.statusCheckRollup | map(select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")) | length) == 0 and
             (.reviews | length) == 0
           )]')
+
+          # Case 2: PRs with CHANGES_REQUESTED where dev pushed new commits after the review
+          # i.e. head commit OID != the commit OID of the last CHANGES_REQUESTED review
+          RE_REVIEW=$(echo "$OPEN_PRS" | jq '[.[] | select(
+            .reviewDecision == "CHANGES_REQUESTED" and
+            (.statusCheckRollup | map(select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")) | length) == 0 and
+            ((.reviews | map(select(.state == "CHANGES_REQUESTED")) | last) // null) as $last_cr |
+            ((.commits | last) // null) as $head |
+            $last_cr != null and
+            $head != null and
+            $last_cr.commit.oid != $head.oid
+          )]')
+
+          CANDIDATES=$(echo "$FIRST_REVIEW $RE_REVIEW" | jq -s 'add | unique_by(.number)')
 
           COUNT=$(echo "$CANDIDATES" | jq length)
           if [ "$COUNT" = "0" ]; then
