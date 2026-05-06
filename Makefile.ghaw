@@ -75,7 +75,8 @@ GHAW_FILES := \
 	.opencode/commands/ghaw-review.md \
 	.opencode/commands/ghaw-integrate.md \
 	.opencode/commands/ghaw-demo.md \
-	DEFINITION_OF_DONE.md
+	DEFINITION_OF_DONE.md \
+	.githooks/pre-push
 
 # =============================================================================
 # VALIDATION GUARDS
@@ -288,6 +289,9 @@ install:
 	  fi; \
 	done
 	@echo "$(GHAW_VERSION)" > .ghaw-version
+	@echo ""
+	@echo "Configuring git hooks..."
+	@git config core.hooksPath .githooks
 	@echo ""
 	@echo "✅ Files installed. Next steps:"
 	@echo "   1. make -f Makefile.ghaw setup-labels"
