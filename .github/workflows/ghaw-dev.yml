@@ -24,16 +24,41 @@ jobs:
           OPEN_PRS=$(gh pr list \
             --repo ${{ github.repository }} \
             --state open \
-            --json number,headRefName,body)
+            --json number,headRefName,body,reviewDecision,reviews,commits)
 
-          # Filter: issues with no linked PR (no "Closes #N" in any open PR body)
-          CANDIDATES=$(echo "$IN_PROGRESS" | jq --argjson prs "$OPEN_PRS" '
+          # Case 1: in-progress issues with no linked PR at all → implement
+          NO_PR=$(echo "$IN_PROGRESS" | jq --argjson prs "$OPEN_PRS" '
             . as $issues |
             $issues | map(
               . as $issue |
               ($prs | map(.body | test("Closes #\($issue.number)"; "i")) | any) as $has_pr |
               if $has_pr then empty else . end
             )')
+
+          # Case 2: in-progress issues whose linked PR has CHANGES_REQUESTED
+          # and no new commits have been pushed since the last CHANGES_REQUESTED review
+          # (new commits = dev already pushed a fix, leave for review agent to re-review)
+          NEEDS_FIX=$(echo "$IN_PROGRESS" | jq --argjson prs "$OPEN_PRS" '
+            . as $issues |
+            $issues | map(
+              . as $issue |
+              ($prs | map(
+                select(.body | test("Closes #\($issue.number)"; "i")) |
+                select(.reviewDecision == "CHANGES_REQUESTED") |
+                # Only include if head commit matches the commit the review was left on
+                # (meaning dev has not yet pushed fixes)
+                ((.reviews | map(select(.state == "CHANGES_REQUESTED")) | last) // null) as $last_cr |
+                ((.commits | last) // null) as $head |
+                select(
+                  $last_cr != null and
+                  $head != null and
+                  $last_cr.commit.oid == $head.oid
+                )
+              ) | length > 0) as $needs_fix |
+              if $needs_fix then . else empty end
+            )')
+
+          CANDIDATES=$(echo "$NO_PR $NEEDS_FIX" | jq -s 'add | unique_by(.number)')
 
           COUNT=$(echo "$CANDIDATES" | jq length)
           if [ "$COUNT" = "0" ]; then
@@ -56,7 +81,7 @@ jobs:
       - name: Build prompt
         id: build
         run: |
-          PROMPT="In-progress issues without PR: $CANDIDATES
+          PROMPT="In-progress issues to action (either no PR yet, or PR has CHANGES_REQUESTED with no new commits): $CANDIDATES
           Open PRs: $OPEN_PRS"
           echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
 

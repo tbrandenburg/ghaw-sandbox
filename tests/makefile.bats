@@ -13,12 +13,13 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
-@test "make test is equivalent to make lint" {
+@test "make test includes lint and test-bats targets" {
   cd "$REPO_ROOT"
-  run make test
+  # Verify the test target depends on both lint and test-bats without executing them
+  run grep -E '^test:' Makefile
   [ "$status" -eq 0 ]
-  # The test target should produce the same lint sections
-  [[ "$output" == *"yamllint"* ]] || [[ "$output" == *"actionlint"* ]] || [[ "$output" == *"markdownlint"* ]]
+  [[ "$output" == *"lint"* ]]
+  [[ "$output" == *"test-bats"* ]]
 }
 
 @test "make hooks sets core.hooksPath" {
