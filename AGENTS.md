@@ -17,6 +17,8 @@ Agents run via OpenCode in GitHub Actions workflows.
 | `make -f Makefile.ghaw publish` | Bump version, tag, and create release |
 | `make -f Makefile.ghaw initial-release` | Create release for current version (no bump) |
 | `make -f Makefile.ghaw info` | Show version and config |
+| `make test` | Run linters and behavioral tests |
+| `make test-bats` | Run BATS behavioral tests only |
 | `actionlint .github/workflows/*.yml` | Validate workflow syntax |
 | `yamllint .github/**/*.yml` | Validate YAML files |
 
@@ -27,6 +29,8 @@ Agents run via OpenCode in GitHub Actions workflows.
 .github/config/       → Runtime config (config.yml)
 .opencode/agents/     → Agent definitions (planner.md, dev.md, etc.)
 .opencode/commands/   → OpenCode command prompts
+tests/                → BATS behavioral tests
+RELEASE_NOTES.md      → Release notes template (fill before publishing)
 .ghaw-version         → Current project version
 ```
 
@@ -55,3 +59,28 @@ Key namespaces: `severity:`, `priority:`, `complexity:`, `confidence:`, `type:`
 - **Never** edit `node_modules/` — it is managed by package.json
 - **Always** use `make -f Makefile.ghaw` targets for label/config changes — not raw `gh` calls
 - **Always** follow the existing `.PHONY` and define patterns when adding Makefile targets
+
+## Testing
+
+Behavioral tests use **BATS** (Bash Automated Testing System) and live in `tests/`.
+
+| Test File | Purpose |
+| --- | --- |
+| `tests/makefile.bats` | Makefile target behavior (exit codes, hook config) |
+| `tests/prompts.bats` | Agent command/agent file frontmatter validation |
+| `tests/workflows.bats` | Workflow YAML structural validation |
+
+### Running Tests
+
+```bash
+make test        # lint + bats
+make test-bats   # bats only
+```
+
+### Adding Tests
+
+- Each `.bats` file contains `@test` blocks with assertions
+- Use `setup()` to define shared variables (e.g., `REPO_ROOT`)
+- Use `run <command>` to capture output and exit status
+- Use `[ "$status" -eq 0 ]` for exit code assertions
+- Use `[[ "$output" == *"pattern"* ]]` for output assertions
