@@ -45,7 +45,7 @@ has_frontmatter_key() {
 @test "all agent files have valid YAML frontmatter with description" {
   cd "$REPO_ROOT"
   local failures=0
-  for f in .opencode/agents/*.md; do
+  for f in .opencode/agent/*.md; do
     if [ ! -f "$f" ]; then
       continue
     fi

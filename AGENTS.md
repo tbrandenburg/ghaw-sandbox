@@ -27,7 +27,7 @@ Agents run via OpenCode in GitHub Actions workflows.
 ```text
 .github/workflows/    → Agent workflows (Bash Prep → OpenCode Run → Bash Verify)
 .github/config/       → Runtime config (config.yml)
-.opencode/agents/     → Agent definitions (planner.md, dev.md, etc.)
+.opencode/agent/      → Agent definitions (planner.md, dev.md, etc.)
 .opencode/commands/   → OpenCode command prompts
 tests/                → BATS behavioral tests
 RELEASE_NOTES.md      → Release notes template (fill before publishing)
