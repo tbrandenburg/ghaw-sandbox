@@ -25,7 +25,7 @@ on `main`. Over 11 merged PRs (PRs #2 through #23), this resulted in:
 ### Timeline
 
 | Date | Event | Notes |
-|------|-------|-------|
+| --- | --- | --- |
 | ~2026-04-29 | Repository bootstrap with initial commit | Full 38-file codebase committed as a single commit |
 | 2026-04-29 | PR #2 – README.md | Merged via squash |
 | 2026-04-30 | PRs #6, #7, #8, #10 – License, docs, README fixes | Merged via squash |
@@ -47,6 +47,7 @@ from those PRs are permanently unrecoverable.
 ### What Was Preserved
 
 PR metadata remains intact in GitHub's issue/PR tracker:
+
 - PR bodies, comments, and review discussions
 - Changed file listings (visible in the "Files changed" tab)
 - Merge timestamps and author information
@@ -71,7 +72,7 @@ commit; this document serves as the concrete remediation.
 ## Related References
 
 | Reference | Description |
-|-----------|-------------|
+| --- | --- |
 | [#28](https://github.com/tbrandenburg/ghaw-sandbox/pull/28) | Switched integrator from squash-merge to merge-commit strategy |
 | [#32](https://github.com/tbrandenburg/ghaw-sandbox/issues/32) | Observation that git history remains a single commit |
 | [#50](https://github.com/tbrandenburg/ghaw-sandbox/issues/50) | Demo finding that history is permanently lost (this document's parent issue) |
