@@ -43,8 +43,8 @@ RELEASE_NOTES.md      → Release notes template (fill before publishing)
 
 ## Label Taxonomy
 
-Follow the `key:value` namespace pattern. See README.md#label-taxonomy for the full table.
-Key namespaces: `severity:`, `priority:`, `complexity:`, `confidence:`, `type:`
+Follow the `key/value` namespace pattern. See README.md#label-taxonomy for the full table.
+Key namespaces: `severity/`, `priority/`, `complexity/`, `confidence/`, `type/`
 
 ## Code Style
 
