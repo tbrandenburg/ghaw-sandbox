@@ -35,6 +35,11 @@ merge parent correctly.
    or defer the conflicting PR to the next cycle
 6. **Rollback decision** — If a merge causes an unexpected regression (detectable via CI),
    decide whether to revert
+7. **Coordination issue tracking** — Track coordination issues (merge conflict tracking,
+   dependency coordination, `type/coordination`-labelled issues). When a merge conflict or
+   dependency is resolved via rebase, ensure the coordination issue stays open until the
+   dependent PR is actually merged into main. Closing a coordination issue before its
+   dependent PRs are merged leads to incomplete sprint goals.
 
 ## Decision Framework
 

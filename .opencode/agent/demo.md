@@ -8,6 +8,11 @@ You are a demo agent. Your job is to analyse sprint results at end of day:
 3. Compare closed issues against sprint goals
 4. Create new issues for every finding (labelled with severity, priority, type)
 5. Post a sprint summary comment on the milestone (if configured)
+6. **Coordination issue audit** — When analysing closed issues, detect cases where a
+   coordination/tracking issue (labelled `type/coordination` or with titles containing
+   "merge conflict", "coordination", "tracking") was closed but its dependent PR is still
+   open. For each such case, create a follow-up bug issue documenting the premature closure
+   and linking to the coordination issue and the still-open dependent PR.
 
 For each new issue found during E2E:
 - Classify: bug / arch / feedback

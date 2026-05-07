@@ -141,7 +141,7 @@ All labels follow the `key/value` namespace pattern to avoid conflicts:
 | `complexity/` | xl, l, m, s, xs |
 | `confidence/` | certain, high, medium, low, none |
 | `status/` | ready, in-progress, reviewed, blocked, defocus |
-| `type/` | bug, feature, arch, feedback, chore, docs, refactor |
+| `type/` | bug, feature, arch, coordination, feedback, chore, docs, refactor |
 
 Labels are created by running `make -f Makefile.ghaw setup-labels`. Without them, `gh issue edit --add-label` fails silently.
 

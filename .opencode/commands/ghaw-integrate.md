@@ -96,6 +96,12 @@ GitHub automatically closes issues referenced with `Closes #N` in the PR body.
 
 The workflow will reliably remove the `reviewed` label after confirming the merge.
 
+**Coordination issue safety:** Do NOT close coordination/tracking issues (merge conflict
+tracking, dependency coordination, or `type/coordination`-labelled issues) until **all**
+dependent PRs are actually merged into main. A rebase that resolves a merge conflict does
+**not** satisfy the dependency — the dependent PR must be merged first. Closing coordination
+issues prematurely inflates sprint velocity and leaves features undelivered.
+
 ### 5c: Post-merge verification
 
 After each merge, verify the build is not broken:
