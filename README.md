@@ -132,16 +132,16 @@ This design keeps reasoning in the LLM layer while using shell scripts for relia
 
 ## Label Taxonomy
 
-All labels follow the `key:value` namespace pattern to avoid conflicts:
+All labels follow the `key/value` namespace pattern to avoid conflicts:
 
 | Namespace | Values |
 | --- | --- |
-| `severity:` | critical, high, medium, low, trivial |
-| `priority:` | critical, high, medium, low, trivial |
-| `complexity:` | xl, l, m, s, xs |
-| `confidence:` | certain, high, medium, low, none |
-| `status:` | ready, in-progress, reviewed, blocked, defocus |
-| `type:` | bug, feature, arch, feedback, chore, docs, refactor |
+| `severity/` | critical, high, medium, low, trivial |
+| `priority/` | critical, high, medium, low, trivial |
+| `complexity/` | xl, l, m, s, xs |
+| `confidence/` | certain, high, medium, low, none |
+| `status/` | ready, in-progress, reviewed, blocked, defocus |
+| `type/` | bug, feature, arch, feedback, chore, docs, refactor |
 
 Labels are created by running `make -f Makefile.ghaw setup-labels`. Without them, `gh issue edit --add-label` fails silently.
 

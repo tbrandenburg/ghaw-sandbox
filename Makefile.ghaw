@@ -128,45 +128,45 @@ WORKFLOW_SPECS := \
 
 # --- Severity (impact-based) ---
 SEVERITY_SPECS := \
-	severity:critical|$(DARK_RED)|Critical severity — system failure or data loss \
-	severity:high|$(DARK_ORANGE)|High severity — significant impact on functionality \
-	severity:medium|$(YELLOW)|Medium severity — limited impact or workaround exists \
-	severity:low|$(GREEN)|Low severity — cosmetic or documentation issues \
-	severity:trivial|$(GREY)|Trivial severity — negligible impact
+	severity/critical|$(DARK_RED)|Critical severity — system failure or data loss \
+	severity/high|$(DARK_ORANGE)|High severity — significant impact on functionality \
+	severity/medium|$(YELLOW)|Medium severity — limited impact or workaround exists \
+	severity/low|$(GREEN)|Low severity — cosmetic or documentation issues \
+	severity/trivial|$(GREY)|Trivial severity — negligible impact
 
 # --- Priority (urgency-based) ---
 PRIORITY_SPECS := \
-	priority:critical|$(DARK_RED)|Critical priority — urgent attention required \
-	priority:high|$(ORANGE)|High priority — address in current sprint \
-	priority:medium|$(YELLOW)|Normal priority — standard workflow \
-	priority:low|$(DARK_GREEN)|Low priority — can be deferred if needed \
-	priority:trivial|$(GREY)|Trivial priority — address opportunistically
+	priority/critical|$(DARK_RED)|Critical priority — urgent attention required \
+	priority/high|$(ORANGE)|High priority — address in current sprint \
+	priority/medium|$(YELLOW)|Normal priority — standard workflow \
+	priority/low|$(DARK_GREEN)|Low priority — can be deferred if needed \
+	priority/trivial|$(GREY)|Trivial priority — address opportunistically
 
 # --- Complexity (SAFe Fibonacci job size) ---
 COMPLEXITY_SPECS := \
-	complexity:xl|$(DARK_RED)|XL complexity — SAFe Fibonacci 13 \
-	complexity:l|$(RED)|L complexity — SAFe Fibonacci 8 \
-	complexity:m|$(YELLOW)|M complexity — SAFe Fibonacci 5 \
-	complexity:s|$(GREEN)|S complexity — SAFe Fibonacci 3 \
-	complexity:xs|$(DARK_GREEN)|XS complexity — SAFe Fibonacci 1
+	complexity/xl|$(DARK_RED)|XL complexity — SAFe Fibonacci 13 \
+	complexity/l|$(RED)|L complexity — SAFe Fibonacci 8 \
+	complexity/m|$(YELLOW)|M complexity — SAFe Fibonacci 5 \
+	complexity/s|$(GREEN)|S complexity — SAFe Fibonacci 3 \
+	complexity/xs|$(DARK_GREEN)|XS complexity — SAFe Fibonacci 1
 
 # --- Confidence (certainty about approach) ---
 CONFIDENCE_SPECS := \
-	confidence:certain|$(DARK_GREEN)|Certain — fully understood, minimal risk \
-	confidence:high|$(GREEN)|High confidence — well understood, low risk \
-	confidence:medium|$(YELLOW)|Medium confidence — some uncertainty, moderate risk \
-	confidence:low|$(ORANGE)|Low confidence — high uncertainty, significant unknowns \
-	confidence:none|$(DARK_RED)|No confidence — approach unclear, needs spike
+	confidence/certain|$(DARK_GREEN)|Certain — fully understood, minimal risk \
+	confidence/high|$(GREEN)|High confidence — well understood, low risk \
+	confidence/medium|$(YELLOW)|Medium confidence — some uncertainty, moderate risk \
+	confidence/low|$(ORANGE)|Low confidence — high uncertainty, significant unknowns \
+	confidence/none|$(DARK_RED)|No confidence — approach unclear, needs spike
 
 # --- Type ---
 TYPE_SPECS := \
-	type:bug|$(RED)|Bug — something is broken \
-	type:feature|$(LIGHT_GREEN)|Feature — new functionality \
-	type:arch|$(YELLOW)|Architecture — structural change \
-	type:feedback|$(PURPLE)|Feedback — from demo or review \
-	type:chore|$(GREY)|Chore — maintenance, no user-visible change \
-	type:docs|$(BLUE)|Documentation — docs only \
-	type:refactor|$(ORANGE)|Refactor — code restructuring without behaviour change
+	type/bug|$(RED)|Bug — something is broken \
+	type/feature|$(LIGHT_GREEN)|Feature — new functionality \
+	type/arch|$(YELLOW)|Architecture — structural change \
+	type/feedback|$(PURPLE)|Feedback — from demo or review \
+	type/chore|$(GREY)|Chore — maintenance, no user-visible change \
+	type/docs|$(BLUE)|Documentation — docs only \
+	type/refactor|$(ORANGE)|Refactor — code restructuring without behaviour change
 
 ALL_LABEL_SPECS := $(WORKFLOW_SPECS) $(SEVERITY_SPECS) $(PRIORITY_SPECS) \
                    $(COMPLEXITY_SPECS) $(CONFIDENCE_SPECS) $(TYPE_SPECS)
