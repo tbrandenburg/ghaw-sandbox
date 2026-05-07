@@ -111,6 +111,7 @@ DARK_ORANGE := D93F0B
 DARK_GREEN := 28A745
 GREY       := CFD3D7
 LIGHT_GREEN := A2EEEF
+CYAN        := 00FFFF
 
 # =============================================================================
 # LABEL SPECIFICATIONS
@@ -163,6 +164,7 @@ TYPE_SPECS := \
 	type/bug|$(RED)|Bug — something is broken \
 	type/feature|$(LIGHT_GREEN)|Feature — new functionality \
 	type/arch|$(YELLOW)|Architecture — structural change \
+	type/coordination|$(CYAN)|Coordination — merge conflict or dependency tracking \
 	type/feedback|$(PURPLE)|Feedback — from demo or review \
 	type/chore|$(GREY)|Chore — maintenance, no user-visible change \
 	type/docs|$(BLUE)|Documentation — docs only \
