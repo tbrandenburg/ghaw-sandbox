@@ -90,8 +90,11 @@ jobs:
             echo "Install URL: ${{ env.OPENCODE_INSTALL_URL }}"
 
             if ! curl -fsSL ${{ env.OPENCODE_INSTALL_URL }} | bash; then
-              echo "ERROR: OpenCode installation failed"
-              exit 1
+              echo "WARNING: Latest OpenCode installation failed (GitHub API unreachable?). Falling back to pinned version 1.14.40."
+              if ! curl -fsSL ${{ env.OPENCODE_INSTALL_URL }} | bash -s -- --version 1.14.40; then
+                echo "ERROR: Pinned fallback installation also failed"
+                exit 1
+              fi
             fi
 
             echo "OpenCode installation completed"
