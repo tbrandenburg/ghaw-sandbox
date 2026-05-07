@@ -53,3 +53,30 @@ setup() {
   [[ "$output" == *"--no-verify"* ]]
   [[ "$output" == *"Pre-push checks failed"* ]]
 }
+
+@test "publish target rejects unpopulated RELEASE_NOTES.md" {
+  # Verify the publish target's placeholder detection logic works:
+  # grep -q '<!--' should find placeholders in the current template
+  cd "$REPO_ROOT"
+  run grep -q '<!--' RELEASE_NOTES.md
+  [ "$status" -eq 0 ]
+}
+
+@test "publish target accepts populated RELEASE_NOTES.md" {
+  # Verify the publish target's placeholder detection logic works:
+  # grep -q '<!--' should NOT find placeholders in a populated file
+  cd "$REPO_ROOT"
+  POPULATED=$(mktemp)
+  echo "## Features
+- Added new login page
+- Updated API endpoints
+
+## Fixes
+- Fixed timeout issue
+
+## Breaking Changes
+None" > "$POPULATED"
+  run grep -q '<!--' "$POPULATED"
+  [ "$status" -eq 1 ]
+  rm -f "$POPULATED"
+}

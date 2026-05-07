@@ -520,6 +520,12 @@ publish:
 	git commit -m "chore: bump version to $$NEW_VERSION"; \
 	git tag "v$$NEW_VERSION"; \
 	git push && git push --tags; \
+	if grep -q '<!--' RELEASE_NOTES.md; then \
+		echo "❌ ERROR: RELEASE_NOTES.md contains unedited placeholder comments."; \
+		echo "   Please fill in the release notes before running make publish."; \
+		echo "   Remove or replace all HTML comments (<!-- ... -->) with actual content."; \
+		exit 1; \
+	fi; \
 	gh release create "v$$NEW_VERSION" -F RELEASE_NOTES.md; \
 	echo "✅ Released v$$NEW_VERSION"
 
