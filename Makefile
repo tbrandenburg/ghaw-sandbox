@@ -23,7 +23,11 @@ lint: lint-yaml lint-actions lint-markdown
 ## lint-yaml: Validate all YAML files with yamllint
 lint-yaml:
 	@echo "--- yamllint ---"
-	$(YAMLLINT) -c .yamllint.yml .github/
+	@if command -v $(YAMLLINT) >/dev/null 2>&1; then \
+		$(YAMLLINT) -c .yamllint.yml .github/; \
+	else \
+		echo "⚠️  Skipping yamllint — not installed. Run 'make install' to install."; \
+	fi
 
 ## lint-actions: Validate GitHub Actions workflows with actionlint
 lint-actions:
@@ -37,7 +41,11 @@ lint-actions:
 ## lint-markdown: Validate Markdown files with markdownlint
 lint-markdown:
 	@echo "--- markdownlint ---"
-	$(MARKDOWNLINT) --config .markdownlint.json "**/*.md" --ignore node_modules --ignore tests
+	@if command -v $(MARKDOWNLINT) >/dev/null 2>&1; then \
+		$(MARKDOWNLINT) --config .markdownlint.json "**/*.md" --ignore node_modules --ignore tests; \
+	else \
+		echo "⚠️  Skipping markdownlint — not installed. Run 'make install' to install."; \
+	fi
 
 ## test-bats: Run BATS behavioral tests
 test-bats:
