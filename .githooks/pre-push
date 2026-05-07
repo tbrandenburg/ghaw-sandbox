@@ -2,4 +2,16 @@
 set -euo pipefail
 
 echo "Running pre-push checks (make test)..."
-make test
+
+if ! make test; then
+  cat <<'GUIDANCE'
+
+==================================================
+Pre-push checks failed. To fix:
+  1. Run `make lint` to see all errors at once
+  2. Fix the reported issues and try again
+  3. For emergency pushes: `git push --no-verify` (use sparingly)
+==================================================
+GUIDANCE
+  exit 1
+fi
