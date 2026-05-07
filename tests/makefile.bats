@@ -44,3 +44,12 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"make test"* ]]
 }
+
+@test "pre-push hook prints actionable error guidance on failure" {
+  cd "$REPO_ROOT"
+  run cat .githooks/pre-push
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"make lint"* ]]
+  [[ "$output" == *"--no-verify"* ]]
+  [[ "$output" == *"Pre-push checks failed"* ]]
+}
