@@ -88,6 +88,7 @@ jobs:
             IS_DEFOCUS=$(echo "$LABELS" | jq 'contains(["defocus"])')
             IS_READY=$(echo "$LABELS" | jq 'contains(["ready"])')
             IS_WIP=$(echo "$LABELS" | jq 'contains(["in-progress"])')
+            IS_BLOCKED=$(echo "$LABELS" | jq 'contains(["blocked"])')
             if [ "$IS_DEFOCUS" = "true" ]; then
               gh issue close $NUMBER \
                 --repo ${{ github.repository }} \
@@ -98,6 +99,7 @@ jobs:
             fi
             [ "$IS_READY" = "true" ] && continue
             [ "$IS_WIP" = "true" ] && continue
+            [ "$IS_BLOCKED" = "true" ] && continue
 
             HAS_LOW_CONF=$(echo "$LABELS" | jq 'contains(["confidence/low"])')
             HAS_HIGH_COMP=$(echo "$LABELS" | jq 'contains(["complexity/high"])')
