@@ -123,4 +123,3 @@ setup() {
   [[ "$output" == *"BUMP=minor"* ]]
   [[ "$output" == *"BUMP=major"* ]]
 }
-}
