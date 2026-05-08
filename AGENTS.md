@@ -14,7 +14,10 @@ Agents run via OpenCode in GitHub Actions workflows.
 | --- | --- |
 | `make -f Makefile.ghaw install` | Install GHAW files into current repo |
 | `make -f Makefile.ghaw setup-labels` | Create required issue labels |
-| `make -f Makefile.ghaw publish` | Bump version, tag, and create release |
+| `make -f Makefile.ghaw publish` | Bump version, tag, and create release (interactive) |
+| `make -f Makefile.ghaw publish BUMP=patch` | Bump patch version non-interactively |
+| `make -f Makefile.ghaw publish BUMP=minor` | Bump minor version non-interactively |
+| `make -f Makefile.ghaw publish BUMP=major` | Bump major version non-interactively |
 | `make -f Makefile.ghaw initial-release` | Create release for current version (no bump) |
 | `make -f Makefile.ghaw info` | Show version and config |
 | `make test` | Run linters and behavioral tests |

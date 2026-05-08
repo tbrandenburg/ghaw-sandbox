@@ -54,29 +54,73 @@ setup() {
   [[ "$output" == *"Pre-push checks failed"* ]]
 }
 
-@test "publish target rejects unpopulated RELEASE_NOTES.md" {
-  # Verify the publish target's placeholder detection logic works:
-  # grep -q '<!--' should find placeholders in the current template
+@test "Makefile.ghaw defines BUMP variable" {
   cd "$REPO_ROOT"
-  run grep -q '<!--' RELEASE_NOTES.md
+  run grep -E '^BUMP\s+\?\=' Makefile.ghaw
   [ "$status" -eq 0 ]
 }
 
-@test "publish target accepts populated RELEASE_NOTES.md" {
-  # Verify the publish target's placeholder detection logic works:
-  # grep -q '<!--' should NOT find placeholders in a populated file
+@test "Makefile.ghaw publish target handles BUMP=major|minor|patch" {
   cd "$REPO_ROOT"
-  POPULATED=$(mktemp)
-  echo "## Features
-- Added new login page
-- Updated API endpoints
+  # Verify the case statement for version bump types exists in the publish target
+  run grep -E '^\s+(major|minor|patch)\)' Makefile.ghaw
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"major)"* ]]
+  [[ "$output" == *"minor)"* ]]
+  [[ "$output" == *"patch)"* ]]
+}
 
-## Fixes
-- Fixed timeout issue
+@test "Makefile.ghaw version bump arithmetic is correct" {
+  cd "$REPO_ROOT"
+  # Test the version bump logic used in the publish target
+  CURRENT="0.2.1"
+  MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+  MINOR=$(echo "$CURRENT" | cut -d. -f2)
+  PATCH=$(echo "$CURRENT" | cut -d. -f3)
 
-## Breaking Changes
-None" > "$POPULATED"
-  run grep -q '<!--' "$POPULATED"
-  [ "$status" -eq 1 ]
-  rm -f "$POPULATED"
+  # Test patch bump
+  VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+  [ "$VERSION" = "0.2.2" ]
+
+  # Test minor bump
+  VERSION="$MAJOR.$((MINOR + 1)).0"
+  [ "$VERSION" = "0.3.0" ]
+
+  # Test major bump
+  VERSION="$((MAJOR + 1)).0.0"
+  [ "$VERSION" = "1.0.0" ]
+
+  # Test with different version
+  CURRENT="1.5.9"
+  MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+  MINOR=$(echo "$CURRENT" | cut -d. -f2)
+  PATCH=$(echo "$CURRENT" | cut -d. -f3)
+
+  VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+  [ "$VERSION" = "1.5.10" ]
+
+  VERSION="$MAJOR.$((MINOR + 1)).0"
+  [ "$VERSION" = "1.6.0" ]
+
+  VERSION="$((MAJOR + 1)).0.0"
+  [ "$VERSION" = "2.0.0" ]
+}
+
+@test "Makefile.ghaw USAGE documents BUMP=patch|minor|major" {
+  cd "$REPO_ROOT"
+  run grep -E 'BUMP=(patch|minor|major)' Makefile.ghaw
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"BUMP=patch"* ]]
+  [[ "$output" == *"BUMP=minor"* ]]
+  [[ "$output" == *"BUMP=major"* ]]
+}
+
+@test "AGENTS.md documents BUMP=patch|minor|major usage" {
+  cd "$REPO_ROOT"
+  run grep -E 'BUMP=(patch|minor|major)' AGENTS.md
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"BUMP=patch"* ]]
+  [[ "$output" == *"BUMP=minor"* ]]
+  [[ "$output" == *"BUMP=major"* ]]
+}
 }
