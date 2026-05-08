@@ -24,6 +24,8 @@ For PRs in the input with reviewDecision=CHANGES_REQUESTED:
 
     gh issue edit {linked-issue-number} \
       --remove-label "reviewed" \
+      --remove-label "blocked" \
+      --remove-label "open" \
       --add-label "in-progress"
     gh issue comment {linked-issue-number} --body "🔄 Changes requested — returning to in-progress."
 

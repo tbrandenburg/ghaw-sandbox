@@ -135,7 +135,10 @@ jobs:
               gh issue edit $ISSUE_NUM \
                 --repo ${{ github.repository }} \
                 --add-label "reviewed" \
-                --remove-label "in-progress"
+                --remove-label "in-progress" \
+                --remove-label "ready" \
+                --remove-label "open" \
+                --remove-label "blocked"
               echo "✅ #$ISSUE_NUM → reviewed (PR #$PR)" >> $GITHUB_STEP_SUMMARY
             else
               DECISION=$(gh pr view $PR --json reviewDecision --jq '.reviewDecision')

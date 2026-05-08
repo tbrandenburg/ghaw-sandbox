@@ -70,7 +70,9 @@ If a blocker is discovered during implementation:
 
     gh issue edit {number} \
       --add-label "blocked" \
-      --remove-label "in-progress"
+      --remove-label "in-progress" \
+      --remove-label "ready" \
+      --remove-label "open"
     gh issue comment {number} --body "🚧 Blocked: {reason}"
 
 ### Step 9: Handle Discovered Sub-Tasks

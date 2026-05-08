@@ -30,7 +30,7 @@ If acceptance criteria are missing or ambiguous:
 
 If the issue is out-of-scope, not actionable, or duplicates another issue:
 
-    gh issue edit {number} --add-label "defocus" --remove-label "open"
+    gh issue edit {number} --add-label "defocus" --remove-label "open" --remove-label "ready" --remove-label "in-progress" --remove-label "blocked"
     gh issue comment {number} --body "⚠️ Grooming: Marked as defocus. Reason: {reason}"
 
 ### Step 3: Feasibility Review

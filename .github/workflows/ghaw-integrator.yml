@@ -218,7 +218,10 @@ jobs:
             gh issue edit $ISSUE_NUM \
               --repo ${{ github.repository }} \
               --add-label "blocked" \
-              --remove-label "in-progress"
+              --remove-label "in-progress" \
+              --remove-label "ready" \
+              --remove-label "open" \
+              --remove-label "reviewed"
             echo "⏸️ #$ISSUE_NUM → blocked (PR #$PR_NUM deferred)" >> $GITHUB_STEP_SUMMARY
           done
 

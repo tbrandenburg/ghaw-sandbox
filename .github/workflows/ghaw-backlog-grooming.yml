@@ -84,11 +84,18 @@ jobs:
             LABELS=$(gh api repos/${{ github.repository }}/issues/$NUMBER \
               --jq '[.labels[].name]')
 
-            # Skip if defocused or already ready/in-progress
+            # Close defocused issues automatically
             IS_DEFOCUS=$(echo "$LABELS" | jq 'contains(["defocus"])')
             IS_READY=$(echo "$LABELS" | jq 'contains(["ready"])')
             IS_WIP=$(echo "$LABELS" | jq 'contains(["in-progress"])')
-            [ "$IS_DEFOCUS" = "true" ] && continue
+            if [ "$IS_DEFOCUS" = "true" ]; then
+              gh issue close $NUMBER \
+                --repo ${{ github.repository }} \
+                --reason "not planned" \
+                --comment "Closing automatically: marked as defocus during grooming (out-of-scope or non-actionable)."
+              echo "🚫 #$NUMBER → closed (defocus)" >> $GITHUB_STEP_SUMMARY
+              continue
+            fi
             [ "$IS_READY" = "true" ] && continue
             [ "$IS_WIP" = "true" ] && continue
 
@@ -99,7 +106,10 @@ jobs:
               gh issue edit $NUMBER \
                 --repo ${{ github.repository }} \
                 --add-label "ready" \
-                --remove-label "open"
+                --remove-label "open" \
+                --remove-label "blocked" \
+                --remove-label "in-progress" \
+                --remove-label "defocus"
               echo "✅ #$NUMBER → ready (auto-promoted)" >> $GITHUB_STEP_SUMMARY
             else
               echo "⏳ #$NUMBER → PO handoff required (confidence/low or complexity/high)" >> $GITHUB_STEP_SUMMARY

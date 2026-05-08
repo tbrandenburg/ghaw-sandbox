@@ -109,5 +109,10 @@ jobs:
           fi
           gh issue edit $ISSUE_NUMBER \
             --repo ${{ github.repository }} \
-            --add-label "open"
+            --add-label "open" \
+            --remove-label "ready" \
+            --remove-label "in-progress" \
+            --remove-label "blocked" \
+            --remove-label "defocus" \
+            --remove-label "reviewed"
           echo "✅ Plan verified for issue #$ISSUE_NUMBER" >> $GITHUB_STEP_SUMMARY
