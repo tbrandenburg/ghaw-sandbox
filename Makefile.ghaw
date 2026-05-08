@@ -25,7 +25,10 @@
 ##   make -f Makefile.ghaw list-labels       # Show current labels in repo
 ##   make -f Makefile.ghaw clean             # Remove all installed files
 ##   make -f Makefile.ghaw info              # Show version + config
-##   make -f Makefile.ghaw publish           # Bump version + tag + release
+##   make -f Makefile.ghaw publish           # Bump version + tag + release (interactive)
+##   make -f Makefile.ghaw publish BUMP=patch   # Bump patch version non-interactively
+##   make -f Makefile.ghaw publish BUMP=minor   # Bump minor version non-interactively
+##   make -f Makefile.ghaw publish BUMP=major   # Bump major version non-interactively
 ##   make -f Makefile.ghaw initial-release   # Create release for current version (no bump)
 ##
 ## OPTIONS:
@@ -42,8 +45,9 @@ SHELL := /bin/bash
 GHAW_VERSION := $(shell cat .ghaw-version 2>/dev/null || echo "0.1.0")
 REPO         ?= $(shell gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)
 
-VERBOSE ?= false
-DEBUG   ?= false
+VERBOSE     ?= false
+DEBUG       ?= false
+BUMP        ?=
 
 # =============================================================================
 # FILE LIST
@@ -514,11 +518,33 @@ publish:
 			exit 1; \
 		fi; \
 	fi; \
-	echo -n "New version: "; read NEW_VERSION; \
-	echo "$$NEW_VERSION" > .ghaw-version; \
+	BUMP_TYPE="$(BUMP)"; \
+	if [ -n "$$BUMP_TYPE" ]; then \
+		CURRENT="$(GHAW_VERSION)"; \
+		MAJOR=$$(echo "$$CURRENT" | cut -d. -f1); \
+		MINOR=$$(echo "$$CURRENT" | cut -d. -f2); \
+		PATCH=$$(echo "$$CURRENT" | cut -d. -f3); \
+		case "$$BUMP_TYPE" in \
+			major) VERSION="$$((MAJOR + 1)).0.0" ;; \
+			minor) VERSION="$$MAJOR.$$((MINOR + 1)).0" ;; \
+			patch) VERSION="$$MAJOR.$$MINOR.$$((PATCH + 1))" ;; \
+			*) \
+				echo "ERROR: BUMP must be 'major', 'minor', or 'patch'. Got: $$BUMP_TYPE"; \
+				echo "Usage: make -f Makefile.ghaw publish BUMP=patch"; \
+				exit 1 ;; \
+		esac; \
+		echo "Auto-increment: $(GHAW_VERSION) → $$VERSION ($$BUMP_TYPE)"; \
+	else \
+		echo -n "New version: "; read VERSION; \
+	fi; \
+	if [ -z "$$VERSION" ]; then \
+		echo "ERROR: Version is required. Use BUMP=patch|minor|major or enter interactively."; \
+		exit 1; \
+	fi; \
+	echo "$$VERSION" > .ghaw-version; \
 	git add .ghaw-version; \
-	git commit -m "chore: bump version to $$NEW_VERSION"; \
-	git tag "v$$NEW_VERSION"; \
+	git commit -m "chore: bump version to $$VERSION"; \
+	git tag "v$$VERSION"; \
 	git push && git push --tags; \
 	if grep -q '<!--' RELEASE_NOTES.md; then \
 		echo "❌ ERROR: RELEASE_NOTES.md contains unedited placeholder comments."; \
@@ -526,8 +552,8 @@ publish:
 		echo "   Remove or replace all HTML comments (<!-- ... -->) with actual content."; \
 		exit 1; \
 	fi; \
-	gh release create "v$$NEW_VERSION" -F RELEASE_NOTES.md; \
-	echo "✅ Released v$$NEW_VERSION"
+	gh release create "v$$VERSION" -F RELEASE_NOTES.md; \
+	echo "✅ Released v$$VERSION"
 
 ## Create GitHub release for current version (no bump)
 initial-release:
