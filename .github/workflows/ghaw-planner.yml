@@ -29,7 +29,8 @@ jobs:
             --json number,comments)
 
           for NUMBER in $(echo "$ISSUES" | jq -r '.[] | select(
-            ([.comments[].body | contains("<!-- PLAN -->")] | any) == false
+            ([.comments[].body | contains("<!-- PLAN -->")] | any) == false and
+            ([.comments[].body | contains("<!-- NO-ACTION -->")] | any) == false
           ) | .number'); do
             echo "Dispatching planner for issue #$NUMBER"
             gh workflow run ghaw-planner.yml \
@@ -63,7 +64,12 @@ jobs:
             --json comments \
             --jq '[.comments[].body | contains("<!-- PLAN -->")] | any')
 
-          if [ "$HAS_PLAN" = "true" ]; then
+          HAS_NO_ACTION=$(gh issue view $ISSUE_NUMBER \
+            --repo ${{ github.repository }} \
+            --json comments \
+            --jq '[.comments[].body | contains("<!-- NO-ACTION -->")] | any')
+
+          if [ "$HAS_PLAN" = "true" ] || [ "$HAS_NO_ACTION" = "true" ]; then
             echo "needs_plan=false" >> $GITHUB_OUTPUT
           else
             echo "needs_plan=true" >> $GITHUB_OUTPUT
@@ -101,6 +107,16 @@ jobs:
             --repo ${{ github.repository }} \
             --json comments \
             --jq '[.comments[].body | contains("<!-- PLAN -->")] | any')
+
+          HAS_NO_ACTION=$(gh issue view $ISSUE_NUMBER \
+            --repo ${{ github.repository }} \
+            --json comments \
+            --jq '[.comments[].body | contains("<!-- NO-ACTION -->")] | any')
+
+          if [ "$HAS_NO_ACTION" = "true" ]; then
+            echo "✅ NO-ACTION marker found — issue self-resolved, no plan needed." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
 
           if [ "$HAS_PLAN" != "true" ]; then
             gh issue comment $ISSUE_NUMBER \

@@ -24,7 +24,27 @@ Use file-read tools to understand:
 
 No hardcoded paths — explore adaptively.
 
-## Step 3: Draft Implementation Plan
+## Step 3: NO-ACTION Check
+
+Before drafting a plan, determine if implementation is actually needed.
+
+Post `<!-- NO-ACTION -->` **only** when ALL of the following are true:
+- The issue is already fully resolved (fix already in codebase or file already gone)
+- OR the issue is invalid / a duplicate of a closed issue
+- OR zero code changes are required to satisfy the acceptance criteria
+
+Do NOT use NO-ACTION for issues that are merely simple or small — those still need a plan.
+
+If NO-ACTION applies:
+
+    gh issue comment $ARGUMENTS --body "<!-- NO-ACTION -->
+    This issue requires no implementation. Reason: {brief justification}"
+
+    gh issue close $ARGUMENTS --reason "completed" --comment "Closing: no implementation needed. {summary}"
+
+Then stop — do not proceed to Step 4 or 5.
+
+## Step 4: Draft Implementation Plan
 
 Structure the plan as:
 
@@ -46,7 +66,7 @@ Structure the plan as:
     ### Estimated Complexity
     {high / medium / low} — {brief justification}
 
-## Step 4: Post Plan + Set Labels
+## Step 5: Post Plan + Set Labels
 
 Post plan as issue comment with marker:
 

@@ -144,6 +144,10 @@ jobs:
             exit 1
           fi
 
+      - name: Cleanup transient prompt file
+        if: always()
+        run: rm -f _prompt.txt
+
       - name: Process results for output
         id: process-results
         if: always()
