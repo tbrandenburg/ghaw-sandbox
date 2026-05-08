@@ -84,19 +84,12 @@ jobs:
             LABELS=$(gh api repos/${{ github.repository }}/issues/$NUMBER \
               --jq '[.labels[].name]')
 
-            # Close defocused issues automatically
+            # Skip if defocused, ready, in-progress, or blocked — groomer handles state transitions
             IS_DEFOCUS=$(echo "$LABELS" | jq 'contains(["defocus"])')
             IS_READY=$(echo "$LABELS" | jq 'contains(["ready"])')
             IS_WIP=$(echo "$LABELS" | jq 'contains(["in-progress"])')
             IS_BLOCKED=$(echo "$LABELS" | jq 'contains(["blocked"])')
-            if [ "$IS_DEFOCUS" = "true" ]; then
-              gh issue close $NUMBER \
-                --repo ${{ github.repository }} \
-                --reason "not planned" \
-                --comment "Closing automatically: marked as defocus during grooming (out-of-scope or non-actionable)."
-              echo "🚫 #$NUMBER → closed (defocus)" >> $GITHUB_STEP_SUMMARY
-              continue
-            fi
+            [ "$IS_DEFOCUS" = "true" ] && continue
             [ "$IS_READY" = "true" ] && continue
             [ "$IS_WIP" = "true" ] && continue
             [ "$IS_BLOCKED" = "true" ] && continue
