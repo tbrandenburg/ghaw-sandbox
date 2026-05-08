@@ -1,5 +1,5 @@
 ---
-description: Groom open issues for clarity, feasibility, defocus, and splitting
+description: Groom open issues for clarity, feasibility, defocus, and splitting. Also triage blocked issues.
 argument-hint: <issues-json>
 ---
 
@@ -7,9 +7,48 @@ argument-hint: <issues-json>
 
 **Input**: $ARGUMENTS (JSON array of open issues)
 
-## For Each Issue
+## Step 0: Blocked Issue Triage
 
-Process each issue in the input JSON sequentially.
+Before grooming open issues, first handle all **blocked** issues in the input.
+
+For each blocked issue, read all comments to understand the blocker reason.
+
+### Hard Blocker
+
+A blocker is **hard** (permanently unresolvable) if it is caused by:
+- A GitHub platform constraint (e.g. `GITHUB_TOKEN` cannot write `.github/workflows/`)
+- An architectural constraint that cannot be changed within this project's scope
+- An external dependency or permission that will never be granted
+
+If hard blocker detected:
+
+1. Defocus and close the blocked issue:
+
+       gh issue edit {number} --add-label "defocus" --remove-label "blocked" --remove-label "in-progress" --remove-label "ready" --remove-label "open"
+       gh issue comment {number} --body "🚫 Hard blocker detected: {reason}\n\nThis issue cannot be resolved as stated. Closing and replacing with a reformulated alternative."
+       gh issue close {number} --reason "not planned"
+
+2. Open a replacement issue with an alternative approach that avoids the constraint:
+
+       gh issue create \
+         --title "{reformulated title}" \
+         --body "Replaces #${number} which was blocked by: {reason}\n\n## Alternative Approach\n\n{description of approach that avoids the constraint}\n\n## Acceptance Criteria\n\n{criteria}" \
+         --label "type/{type},priority/{val},severity/{val},complexity/{val},confidence/{val},open"
+       gh issue comment {number} --body "♻️ Replaced by #{new-number}"
+
+### Soft Blocker
+
+A blocker is **soft** (circumstantial) if it is caused by:
+- A flaky test or transient CI failure
+- A secret or credential not yet configured
+- Waiting on another PR or issue to merge first
+- A missing clarification that can be provided
+
+If soft blocker: leave the issue as-is with no changes. The planner agent handles unblocking.
+
+## For Each Open Issue
+
+Process each non-blocked issue in the input JSON sequentially.
 
 ### Step 1: Clarity Check
 
