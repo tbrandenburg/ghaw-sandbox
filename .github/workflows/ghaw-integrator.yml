@@ -225,6 +225,32 @@ jobs:
             echo "⏸️ #$ISSUE_NUM → blocked (PR #$PR_NUM deferred)" >> $GITHUB_STEP_SUMMARY
           done
 
+          # Escape hatch: if a PR was closed without merging, the issue is stuck in reviewed.
+          # Remove reviewed and reset to open so grooming picks it up again.
+          REVIEWED_ISSUES=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label reviewed \
+            --json number)
+
+          for ISSUE_NUM in $(echo "$REVIEWED_ISSUES" | jq -r '.[].number'); do
+            PR_NUM=$(gh pr list \
+              --repo ${{ github.repository }} \
+              --state all \
+              --json number,body \
+              --jq --argjson n "$ISSUE_NUM" \
+              '[.[] | select(.body | test("Closes #\($n)"; "i"))] | last | .number // empty')
+            [ -z "$PR_NUM" ] && continue
+
+            PR_STATE=$(gh pr view "$PR_NUM" --repo ${{ github.repository }} --json state --jq '.state')
+            if [ "$PR_STATE" = "CLOSED" ]; then
+              gh issue edit "$ISSUE_NUM" \
+                --repo ${{ github.repository }} \
+                --remove-label "reviewed" \
+                --add-label "open"
+              echo "♻️ #$ISSUE_NUM → open (PR #$PR_NUM was closed without merging)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
           gh pr list \
             --repo ${{ github.repository }} \
             --state merged \

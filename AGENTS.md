@@ -39,6 +39,10 @@ RELEASE_NOTES.md      → Release notes template (fill before publishing)
 .ghaw-version         → Current project version
 ```
 
+## Design Philosophy
+
+Since handling issues autonomously is already complex enough, every design decision must favour simplicity and reduction over adding. New workflows, steps, and edge-case handlers must be justified — prefer reordering or extending existing code. The workflow must be human-understandable and easily describable in a single sentence per agent.
+
 ## State Machine — Critical Rules
 
 State labels (`open`, `ready`, `in-progress`, `reviewed`, `blocked`, `defocus`) are **mutually exclusive**.

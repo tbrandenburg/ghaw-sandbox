@@ -93,6 +93,7 @@ jobs:
               --jq '[.comments[].body | contains("<!-- PLAN -->")] | any')
             if [ "$HAS_PLAN" != "true" ]; then
               echo "⏭️ #$NUMBER skipped — no implementation plan. Planner Agent will create one." >> $GITHUB_STEP_SUMMARY
+              # Comment first so the state is recoverable if the workflow crashes before the label edit
               gh issue comment $NUMBER \
                 --repo ${{ github.repository }} \
                 --body "⏭️ Sprint Planning skipped: missing implementation plan. Planner Agent will create one."
