@@ -8,15 +8,7 @@ on:
     types: [unlabeled]              # Re-assess when confidence/low is removed by PO
 
 jobs:
-  heal-before:
-    uses: ./.github/workflows/core-state-heal.yml
-    with:
-      issue-numbers: all
-    permissions:
-      issues: write
-
   prepare:
-    needs: heal-before
     runs-on: ubuntu-latest
     outputs:
       has_issues: ${{ steps.fetch.outputs.has_issues }}
@@ -124,12 +116,3 @@ jobs:
               echo "⏳ #$NUMBER → PO handoff required (confidence/low or complexity/high)" >> $GITHUB_STEP_SUMMARY
             fi
           done
-
-  heal-after:
-    needs: [prepare, summary]
-    if: needs.prepare.outputs.has_issues == 'true'
-    uses: ./.github/workflows/core-state-heal.yml
-    with:
-      issue-numbers: all
-    permissions:
-      issues: write

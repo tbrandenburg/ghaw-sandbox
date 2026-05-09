@@ -1,114 +1,58 @@
-name: Core - Issue State Healer
+name: GHAW - Issue State Healer
 
-# Reusable workflow: detects ambiguous state labels on issues and heals them
-# by keeping only the label that was set last (via issue events API).
+# Event-driven: fires whenever a label is added to any issue.
+# If the label is a state label and the issue now carries more than one
+# state label, heals it by keeping the one just added and removing the rest.
 #
 # State labels (mutually exclusive): open, ready, in-progress, reviewed, blocked, defocus
-#
-# Usage:
-#   uses: ./.github/workflows/core-state-heal.yml
-#   with:
-#     issue-numbers: "12 34 56"   # space-separated list, or "all" to scan all open issues
 
 on:
-  workflow_call:
-    inputs:
-      issue-numbers:
-        description: 'Space-separated issue numbers to heal, or "all" to scan all open issues'
-        required: true
-        type: string
-    outputs:
-      healed:
-        description: 'Space-separated list of issue numbers that were healed'
-        value: ${{ jobs.heal.outputs.healed }}
-      ambiguous-found:
-        description: 'true if any ambiguous issue was found'
-        value: ${{ jobs.heal.outputs.ambiguous-found }}
+  issues:
+    types: [labeled]
 
 jobs:
   heal:
+    # Only run if the added label is a state label
+    if: |
+      contains(fromJSON('["open","ready","in-progress","reviewed","blocked","defocus"]'),
+               github.event.label.name)
     runs-on: ubuntu-latest
-    outputs:
-      healed:          ${{ steps.heal.outputs.healed }}
-      ambiguous-found: ${{ steps.heal.outputs.ambiguous-found }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      STATE_LABELS: "open ready in-progress reviewed blocked defocus"
     steps:
-      - name: Heal ambiguous issue state labels
-        id: heal
+      - name: Heal ambiguous state labels on issue ${{ github.event.issue.number }}
         run: |
           set -euo pipefail
 
           STATE_LABELS="open ready in-progress reviewed blocked defocus"
           REPO="${{ github.repository }}"
-          INPUT="${{ inputs.issue-numbers }}"
-          HEALED=""
-          AMBIGUOUS_FOUND=false
+          NUMBER="${{ github.event.issue.number }}"
+          ADDED="${{ github.event.label.name }}"
 
-          if [ "$INPUT" = "all" ]; then
-            NUMBERS=$(gh issue list \
-              --repo "$REPO" \
-              --state open \
-              --limit 200 \
-              --json number \
-              --jq '[.[].number] | join(" ")')
-          else
-            NUMBERS="$INPUT"
+          # Fetch current labels
+          CURRENT=$(gh api "repos/$REPO/issues/$NUMBER" \
+            --jq '[.labels[].name]')
+
+          # Count state labels currently set
+          STATE_COUNT=$(echo "$CURRENT" | jq \
+            --argjson states '["open","ready","in-progress","reviewed","blocked","defocus"]' \
+            '[.[] | select(. as $l | $states | index($l) != null)] | length')
+
+          if [ "$STATE_COUNT" -le "1" ]; then
+            echo "✅ #$NUMBER — state is clean (\`$ADDED\`), nothing to heal" >> $GITHUB_STEP_SUMMARY
+            exit 0
           fi
 
-          for NUMBER in $NUMBERS; do
-            # Fetch current labels on this issue
-            CURRENT=$(gh api "repos/$REPO/issues/$NUMBER" \
-              --jq '[.labels[].name]')
+          echo "⚠️ #$NUMBER — $STATE_COUNT state labels detected, healing to \`$ADDED\`" >> $GITHUB_STEP_SUMMARY
 
-            # Count how many state labels are currently set
-            STATE_COUNT=$(echo "$CURRENT" | jq \
-              --argjson states '["open","ready","in-progress","reviewed","blocked","defocus"]' \
-              '[.[] | select(. as $l | $states | index($l) != null)] | length')
-
-            if [ "$STATE_COUNT" -le "1" ]; then
-              continue  # clean — nothing to do
+          # Remove every state label except the one just added
+          for LABEL in $STATE_LABELS; do
+            [ "$LABEL" = "$ADDED" ] && continue
+            IS_SET=$(echo "$CURRENT" | jq --arg l "$LABEL" 'contains([$l])')
+            if [ "$IS_SET" = "true" ]; then
+              gh issue edit "$NUMBER" --repo "$REPO" --remove-label "$LABEL"
+              echo "  removed \`$LABEL\`" >> $GITHUB_STEP_SUMMARY
             fi
-
-            AMBIGUOUS_FOUND=true
-            echo "⚠️  Issue #$NUMBER has $STATE_COUNT state labels: $(echo "$CURRENT" | jq -r 'join(", ")')" >> $GITHUB_STEP_SUMMARY
-
-            # Find the last-set state label via events API.
-            # --paginate with --jq filters per page, so we collect raw JSON across
-            # all pages first, then merge and find the global last labeled event.
-            LAST_STATE=$(gh api "repos/$REPO/issues/$NUMBER/events" \
-              --paginate \
-              --jq '[.[] | select(.event == "labeled") | select(.label.name | IN("open","ready","in-progress","reviewed","blocked","defocus"))]' \
-              | jq -s 'add // [] | last | .label.name // empty' \
-              | tr -d '"')
-
-            if [ -z "$LAST_STATE" ]; then
-              echo "  ⚠️  Could not determine last-set state for #$NUMBER — skipping" >> $GITHUB_STEP_SUMMARY
-              continue
-            fi
-
-            echo "  → Keeping \`$LAST_STATE\`, removing others" >> $GITHUB_STEP_SUMMARY
-
-            # Remove all state labels except the last one set
-            for LABEL in $STATE_LABELS; do
-              [ "$LABEL" = "$LAST_STATE" ] && continue
-              IS_SET=$(echo "$CURRENT" | jq --arg l "$LABEL" 'contains([$l])')
-              [ "$IS_SET" = "true" ] && \
-                gh issue edit "$NUMBER" --repo "$REPO" --remove-label "$LABEL" 2>/dev/null || true
-            done
-
-            HEALED="$HEALED $NUMBER"
-            echo "  ✅ #$NUMBER healed → \`$LAST_STATE\`" >> $GITHUB_STEP_SUMMARY
           done
 
-          HEALED=$(echo "$HEALED" | xargs)  # trim whitespace
-          echo "healed=$HEALED"          >> $GITHUB_OUTPUT
-          echo "ambiguous-found=$AMBIGUOUS_FOUND" >> $GITHUB_OUTPUT
-
-          if [ "$AMBIGUOUS_FOUND" = "true" ]; then
-            echo "### State Healer Summary" >> $GITHUB_STEP_SUMMARY
-            echo "Healed issues: ${HEALED:-none}" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "✅ All issues have clean state labels" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "✅ #$NUMBER healed → \`$ADDED\`" >> $GITHUB_STEP_SUMMARY

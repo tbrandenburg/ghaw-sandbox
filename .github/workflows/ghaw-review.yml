@@ -145,12 +145,3 @@ jobs:
               echo "PR #$PR: no passing review detected (decision: $DECISION)" >> $GITHUB_STEP_SUMMARY
             fi
           done
-
-  heal-after:
-    needs: [prepare, verify]
-    if: always() && needs.prepare.outputs.has_candidates == 'true'
-    uses: ./.github/workflows/core-state-heal.yml
-    with:
-      issue-numbers: all
-    permissions:
-      issues: write

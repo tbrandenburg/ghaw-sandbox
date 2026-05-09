@@ -6,20 +6,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  heal-before:
-    uses: ./.github/workflows/core-state-heal.yml
-    with:
-      issue-numbers: all
-    permissions:
-      issues: write
-
   prepare:
-    needs: heal-before
     runs-on: ubuntu-latest
     outputs:
       has_candidates: ${{ steps.filter.outputs.has_candidates }}
       prompt:         ${{ steps.build.outputs.prompt }}
-      candidate_numbers: ${{ steps.filter.outputs.candidate_numbers }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -74,8 +65,6 @@ jobs:
             echo "has_candidates=false" >> $GITHUB_OUTPUT
           else
             echo "has_candidates=true" >> $GITHUB_OUTPUT
-            NUMBERS=$(echo "$CANDIDATES" | jq -r '[.[].number] | join(" ")')
-            echo "candidate_numbers=$NUMBERS" >> $GITHUB_OUTPUT
           fi
 
           {
@@ -146,12 +135,3 @@ jobs:
             fi
           done
           exit $FAILED
-
-  heal-after:
-    needs: [prepare, verify]
-    if: always() && needs.prepare.outputs.has_candidates == 'true'
-    uses: ./.github/workflows/core-state-heal.yml
-    with:
-      issue-numbers: ${{ needs.prepare.outputs.candidate_numbers }}
-    permissions:
-      issues: write

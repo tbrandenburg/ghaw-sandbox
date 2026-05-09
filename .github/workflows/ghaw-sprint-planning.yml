@@ -6,15 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  heal-before:
-    uses: ./.github/workflows/core-state-heal.yml
-    with:
-      issue-numbers: all
-    permissions:
-      issues: write
-
   prepare:
-    needs: heal-before
     runs-on: ubuntu-latest
     outputs:
       has_candidates: ${{ steps.fetch.outputs.has_candidates }}
@@ -181,12 +173,3 @@ jobs:
             echo "✅ #$NUMBER → in-progress" >> $GITHUB_STEP_SUMMARY
             ASSIGNED=$(( ASSIGNED + 1 ))
           done
-
-  heal-after:
-    needs: [prepare, summary]
-    if: always() && needs.prepare.outputs.has_candidates == 'true'
-    uses: ./.github/workflows/core-state-heal.yml
-    with:
-      issue-numbers: all
-    permissions:
-      issues: write
