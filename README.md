@@ -108,20 +108,36 @@ A dedicated background workflow (`core-state-heal.yml`) enforces the mutual-excl
 State labels are **mutually exclusive**. An issue carries exactly one state label at any time. The `core-state-heal.yml` workflow enforces this on every label-add event.
 
 ```mermaid
-stateDiagram-v2
-    [*] --> open : Issue opened\n(Planner creates plan)
-    open --> ready : Groomer passes all checks\n(confidence ≠ low, complexity ≠ high)
-    ready --> open : Sprint Planner: no plan found\n(demoted, Planner retriggered)
-    ready --> in-progress : Sprint Planner: WSJF top-N\nwithin WIP limit
-    in-progress --> reviewed : Review Agent:\n✅ Technical review passed
-    in-progress --> blocked : Dev Agent: blocker found\nIntegrator: merge deferred
-    reviewed --> blocked : Integrator: merge deferred\n(conflict detected)
-    blocked --> ready : Sprint Planner:\nblocker resolved
-    reviewed --> [*] : Integrator merges PR\n(GitHub closes issue)
-    open --> defocus : Groomer: out of scope\nor hard blocker
-    ready --> defocus : Groomer: out of scope
-    in-progress --> defocus : Groomer: out of scope
-    blocked --> defocus : Groomer: hard blocker
+flowchart TD
+    START(( )) -->|"issues:opened / Planner verify"| OPEN
+
+    OPEN([open])
+    READY([ready])
+    WIP([in-progress])
+    REVIEWED([reviewed])
+    BLOCKED([blocked])
+    DEFOCUS([defocus])
+    CLOSED(( ))
+
+    OPEN -->|"BGA: confidence≠low ∧ complexity≠xl/l\n+ plan exists"| READY
+    OPEN -->|"BGA: timeout 3d / out-of-scope\nor hard blocker"| DEFOCUS
+
+    READY -->|"SPA gate: plan missing → demote"| OPEN
+    READY -->|"SPA: WSJF top-N, WIP slot free"| WIP
+
+    WIP -->|"Review: ✅ Technical review passed + CI green"| REVIEWED
+    WIP -->|"Dev Agent: blocker found"| BLOCKED
+
+    REVIEWED -->|"Integrator: PO approved + CI green"| CLOSED
+    REVIEWED -.->|"Escape hatch: PR closed without merge"| OPEN
+    REVIEWED -.->|"SPA: CHANGES_REQUESTED + new commits"| WIP
+    REVIEWED -->|"Integrator: merge deferred\n← DEFERRED → marker"| BLOCKED
+
+    BLOCKED -->|"SPA: blocker resolved"| READY
+    BLOCKED -->|"BGA: hard blocker confirmed"| DEFOCUS
+
+    DEFOCUS --> TERMINAL(( ))
+    CLOSED --> TERMINAL
 ```
 
 ### State Transition Table
@@ -130,16 +146,18 @@ stateDiagram-v2
 | --- | --- | --- | --- |
 | *(new issue)* | **Planner** | `open` | `<!-- PLAN -->` comment; `open` label set |
 | `open` | **Groomer** | `ready` | Labels updated; `ready` set, `open` removed |
-| `open` | **Groomer** | `defocus` | Labels updated; issue closed |
+| `open` | **Groomer** | `defocus` | Issue closed (`not planned`); `defocus` set |
 | `ready` | **Sprint Planner** (gate) | `open` | Issue demoted — no plan found |
 | `ready` | **Sprint Planner** | `in-progress` | `in-progress` set, `ready` removed |
 | `in-progress` | **Dev** | PR opened | Branch, commits, pull request (`Closes #N`) |
 | `in-progress` | **Dev** (blocker) | `blocked` | `blocked` set, `in-progress` removed; comment |
 | `in-progress` | **Review** | `reviewed` | `reviewed` set, `in-progress` removed |
 | `reviewed` | **Integrator** | *(closed)* | Merge commit on `main`; `reviewed` removed |
-| `reviewed` | **Integrator** (deferred) | `blocked` | `blocked` set, `reviewed` removed; `⏸️ Merge deferred` comment |
+| `reviewed` | **Integrator** (deferred) | `blocked` | `blocked` set, `reviewed` removed; `<!-- DEFERRED -->` marker in PR comment |
+| `reviewed` | **Integrator** (escape hatch) | `open` | PR closed without merge; `reviewed` removed, `open` set |
 | `blocked` | **Sprint Planner** | `ready` | `blocked` removed, `ready` restored |
-| any | **State Healer** | last-set state | Conflicting state labels removed |
+| `blocked` | **Groomer** (hard blocker) | `defocus` | Issue closed; replacement issue created |
+| any | **State Healer** | last-set state | Conflicting state labels removed instantly |
 
 ---
 
@@ -204,7 +222,7 @@ GHAW includes eight specialised AI agents, each responsible for a distinct phase
 
 ### Key Design Principles
 
-- **Agents signal via comments, workflows apply labels.** Commands explicitly instruct agents not to set state labels directly — the verify step detects signals (`✅ Technical review passed`, `⏸️ Merge deferred`) and applies labels deterministically.
+- **Agents signal via comments, workflows apply labels.** Commands explicitly instruct agents not to set state labels directly — the verify step detects structured signals (`✅ Technical review passed`, `<!-- DEFERRED -->`) and applies labels deterministically.
 - **State healer runs independently.** No agent workflow calls the healer — it fires reactively on every `issues: labeled` event, keeping state consistent without coupling.
 - **Guards before, verification after.** Prep steps filter out issues in wrong states before the agent runs. Verify steps confirm expected outcomes after.
 
