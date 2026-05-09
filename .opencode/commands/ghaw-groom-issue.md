@@ -96,6 +96,8 @@ If architectural conflict or missing dependency found:
     gh issue comment {number} \
       --body "⚠️ Feasibility concern: {description of conflict or missing dependency}"
 
+    gh issue edit {number} --add-label "confidence/low"
+
 ### Step 5: Story Splitting
 
 If the issue scope is too large for a single sprint (complexity/high and multiple independent concerns):

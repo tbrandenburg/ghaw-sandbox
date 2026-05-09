@@ -206,7 +206,7 @@ jobs:
 
           for PR_NUM in $(echo "$OPEN_PRS" | jq -r '.[].number'); do
             DEFERRED=$(gh api repos/${{ github.repository }}/issues/$PR_NUM/comments \
-              --jq '[.[] | select(.body | contains("⏸️ Merge deferred"))] | length > 0')
+              --jq '[.[] | select(.body | contains("<!-- DEFERRED -->"))] | length > 0')
             [ "$DEFERRED" != "true" ] && continue
 
             ISSUE_NUM=$(gh pr view $PR_NUM \
