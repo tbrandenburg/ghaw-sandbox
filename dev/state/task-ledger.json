@@ -1,0 +1,35 @@
+{
+  "T1": {
+    "status": "done",
+    "evidence": [
+      "grep -n complexity ghaw-backlog-grooming.yml → line 104: jq 'contains([\"complexity/xl\"]) or contains([\"complexity/l\"])'"
+    ],
+    "last_verified": "2026-05-09T00:00:00Z"
+  },
+  "T2": {
+    "status": "done",
+    "evidence": [
+      "grep -n reviewed ghaw-sprint-planning.yml → line 167-170: IS_REVIEWED guard skips reviewed issues before label assignment"
+    ],
+    "last_verified": "2026-05-09T00:00:00Z"
+  },
+  "T3": {
+    "status": "done",
+    "evidence": [
+      "grep -n blocked ghaw-sprint-plan.md → line 16: gh issue edit {number} --add-label \"ready\" --remove-label \"blocked\""
+    ],
+    "last_verified": "2026-05-09T00:00:00Z"
+  },
+  "T4": {
+    "status": "done",
+    "evidence": [
+      "grep -n reviewed ghaw-dev.yml → lines 25-28: IN_PROGRESS filtered with jq select to exclude reviewed issues"
+    ],
+    "last_verified": "2026-05-09T00:00:00Z"
+  },
+  "T5": {
+    "status": "in_progress",
+    "evidence": [],
+    "last_verified": null
+  }
+}

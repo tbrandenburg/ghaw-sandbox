@@ -32,19 +32,13 @@ jobs:
               --json number,title,body,labels,comments,updatedAt \
               --jq '[.]')
           else
-            # Top 10 oldest-updated open issues
+            # Top 10 oldest-updated issues explicitly in open state
             ISSUES=$(gh issue list \
               --repo ${{ github.repository }} \
-              --state open \
+              --label open \
               --json number,title,body,labels,comments,updatedAt \
               --jq 'sort_by(.updatedAt) | .[0:10]')
           fi
-
-          # Guard: only groom issues in state open — skip any already past that
-          ISSUES=$(echo "$ISSUES" | jq '[.[] | select(
-            ([.labels[].name] | contains(["ready"]) or contains(["in-progress"]) or
-             contains(["reviewed"]) or contains(["blocked"]) or contains(["defocus"])) | not
-          )]')
 
           COUNT=$(echo "$ISSUES" | jq length)
           if [ "$COUNT" = "0" ]; then
@@ -101,7 +95,7 @@ jobs:
             [ "$IS_BLOCKED" = "true" ] && continue
 
             HAS_LOW_CONF=$(echo "$LABELS" | jq 'contains(["confidence/low"])')
-            HAS_HIGH_COMP=$(echo "$LABELS" | jq 'contains(["complexity/high"])')
+            HAS_HIGH_COMP=$(echo "$LABELS" | jq 'contains(["complexity/xl"]) or contains(["complexity/l"])')
 
             if [ "$HAS_LOW_CONF" = "false" ] && [ "$HAS_HIGH_COMP" = "false" ]; then
               gh issue edit $NUMBER \
@@ -113,6 +107,6 @@ jobs:
                 --remove-label "defocus"
               echo "✅ #$NUMBER → ready (auto-promoted)" >> $GITHUB_STEP_SUMMARY
             else
-              echo "⏳ #$NUMBER → PO handoff required (confidence/low or complexity/high)" >> $GITHUB_STEP_SUMMARY
+              echo "⏳ #$NUMBER → PO handoff required (confidence/low or complexity/xl or complexity/l)" >> $GITHUB_STEP_SUMMARY
             fi
           done

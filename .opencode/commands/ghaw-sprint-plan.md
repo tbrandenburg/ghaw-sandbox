@@ -13,7 +13,7 @@ For each blocked issue:
 - Read blocker comments to determine if the blocking condition is resolved
 - If resolved:
 
-      gh issue edit {number} --remove-label "blocked"
+      gh issue edit {number} --add-label "ready" --remove-label "blocked"
       gh issue comment {number} --body "✅ Blocker resolved — returning to ready state."
 
 - If still blocked: leave as-is, note it in step summary

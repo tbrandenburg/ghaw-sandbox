@@ -21,6 +21,12 @@ jobs:
             --repo ${{ github.repository }} \
             --label in-progress \
             --json number,title,body,labels,comments)
+
+          # Guard: exclude issues also carrying reviewed — they have a PR awaiting merge
+          IN_PROGRESS=$(echo "$IN_PROGRESS" | jq '[.[] | select(
+            ([.labels[].name] | contains(["reviewed"])) | not
+          )]')
+
           OPEN_PRS=$(gh pr list \
             --repo ${{ github.repository }} \
             --state open \

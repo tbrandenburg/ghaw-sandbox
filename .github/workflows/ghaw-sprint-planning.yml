@@ -163,13 +163,19 @@ jobs:
           ASSIGNED=0
           for NUMBER in $(echo "$SCORED" | jq -r '.[].number'); do
             [ "$ASSIGNED" -ge "$SLOTS" ] && break
+            # Guard: skip issues already in reviewed — they have an open PR awaiting merge
+            IS_REVIEWED=$(gh api repos/${{ github.repository }}/issues/$NUMBER \
+              --jq '[.labels[].name] | contains(["reviewed"])')
+            if [ "$IS_REVIEWED" = "true" ]; then
+              echo "⏭️ #$NUMBER skipped — already reviewed, awaiting merge" >> $GITHUB_STEP_SUMMARY
+              continue
+            fi
             gh issue edit $NUMBER \
               --repo ${{ github.repository }} \
               --add-label "in-progress" \
               --remove-label "ready" \
               --remove-label "open" \
-              --remove-label "blocked" \
-              --remove-label "reviewed"
+              --remove-label "blocked"
             echo "✅ #$NUMBER → in-progress" >> $GITHUB_STEP_SUMMARY
             ASSIGNED=$(( ASSIGNED + 1 ))
           done
