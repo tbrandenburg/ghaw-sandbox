@@ -11,6 +11,7 @@
 - [Quick Start](#quick-start)
 - [Requirements](#requirements)
 - [How It Works](#how-it-works)
+- [State Machine](#state-machine)
 - [Agents](#agents)
 - [Architecture](#architecture)
 - [Label Taxonomy](#label-taxonomy)
@@ -87,34 +88,7 @@ Before installing and running GHAW, ensure the following are in place:
 
 ## How It Works
 
-GHAW manages issues through an automated lifecycle:
-
-```text
-open → ready → in-progress → reviewed → closed
-```
-
-Each issue moves through these states as AI agents analyse, implement, review, and merge work. Agents are triggered on schedules (hourly or daily) and respond to specific events like new issues or failing CI.
-
----
-
-## Agents
-
-GHAW includes eight specialised AI agents, each responsible for a distinct phase of the development cycle:
-
-| Agent | Trigger | What It Does |
-| --- | --- | --- |
-| **Planner** | New issue opened | Analyses the issue, creates a step-by-step implementation plan, and assigns severity, priority, and complexity labels |
-| **Groomer** | Daily at 06:00 UTC | Reviews open issues for clarity, feasibility, and scope — asks for missing details, splits large issues, or marks out-of-scope work |
-| **Sprint Planner** | Daily at 07:00 UTC | Ranks ready issues using WSJF (Weighted Shortest Job First) scoring and assigns the highest-value issues to in-progress |
-| **Dev** | Hourly | Picks up in-progress issues, explores the codebase, writes the implementation, commits changes, and opens a pull request |
-| **CI/CD** | Hourly | Monitors open PRs for failing CI — diagnoses errors and pushes fixes automatically |
-| **Review** | Hourly | Reviews open PRs against the Definition of Done and acceptance criteria, leaving feedback or approving when ready |
-| **Integrator** | Hourly | Merges approved PRs (with green CI) via squash merge — no OpenCode interaction needed |
-| **Demo** | Daily at 20:00 UTC | Runs end-to-end test analysis, creates follow-up issues from failures, and posts a daily sprint summary |
-
----
-
-## Architecture
+GHAW manages issues through an automated lifecycle driven by state labels and AI agents. Each issue progresses through a well-defined state machine. Agents are triggered on schedules (hourly or every 6 hours) and react to specific GitHub events.
 
 Every agent follows the same three-phase execution pattern:
 
@@ -122,11 +96,118 @@ Every agent follows the same three-phase execution pattern:
 Bash Preparation  →  OpenCode Run  →  Bash Verification
 ```
 
-1. **Bash Preparation** — Deterministic `gh` CLI calls collect context (issue body, comments, affected files) and build the agent-specific prompt.
-2. **OpenCode Run** — The LLM performs all reasoning: analysing the issue, deciding on actions, and executing them via the `gh` CLI.
-3. **Bash Verification** — Post-run checks confirm the expected GitHub state (labels applied, PR created, etc.) was achieved.
+1. **Bash Preparation** — Deterministic `gh` CLI calls collect context and build the agent prompt. Guards reject issues in unexpected states before the agent runs.
+2. **OpenCode Run** — The LLM reasons, makes decisions, and acts via `gh` CLI.
+3. **Bash Verification** — Post-run checks confirm expected GitHub state was achieved (PR created, plan comment present, etc.).
 
-This design keeps reasoning in the LLM layer while using shell scripts for reliable, deterministic GitHub API interactions.
+A dedicated background workflow (`core-state-heal.yml`) enforces the mutual-exclusion invariant on state labels: whenever any label is added to an issue, it fires instantly and removes any conflicting state labels — keeping only the one just set.
+
+---
+
+## State Machine
+
+State labels are **mutually exclusive**. An issue carries exactly one state label at any time. The `core-state-heal.yml` workflow enforces this on every label-add event.
+
+```mermaid
+stateDiagram-v2
+    [*] --> open : Issue opened\n(Planner creates plan)
+    open --> ready : Groomer passes all checks\n(confidence ≠ low, complexity ≠ high)
+    ready --> open : Sprint Planner: no plan found\n(demoted, Planner retriggered)
+    ready --> in-progress : Sprint Planner: WSJF top-N\nwithin WIP limit
+    in-progress --> reviewed : Review Agent:\n✅ Technical review passed
+    in-progress --> blocked : Dev Agent: blocker found\nIntegrator: merge deferred
+    reviewed --> blocked : Integrator: merge deferred\n(conflict detected)
+    blocked --> ready : Sprint Planner:\nblocker resolved
+    reviewed --> [*] : Integrator merges PR\n(GitHub closes issue)
+    open --> defocus : Groomer: out of scope\nor hard blocker
+    ready --> defocus : Groomer: out of scope
+    in-progress --> defocus : Groomer: out of scope
+    blocked --> defocus : Groomer: hard blocker
+```
+
+### State Transition Table
+
+| Input State | Agent / Workflow | Output State | Output Artefact |
+| --- | --- | --- | --- |
+| *(new issue)* | **Planner** | `open` | `<!-- PLAN -->` comment; `open` label set |
+| `open` | **Groomer** | `ready` | Labels updated; `ready` set, `open` removed |
+| `open` | **Groomer** | `defocus` | Labels updated; issue closed |
+| `ready` | **Sprint Planner** (gate) | `open` | Issue demoted — no plan found |
+| `ready` | **Sprint Planner** | `in-progress` | `in-progress` set, `ready` removed |
+| `in-progress` | **Dev** | PR opened | Branch, commits, pull request (`Closes #N`) |
+| `in-progress` | **Dev** (blocker) | `blocked` | `blocked` set, `in-progress` removed; comment |
+| `in-progress` | **Review** | `reviewed` | `reviewed` set, `in-progress` removed |
+| `reviewed` | **Integrator** | *(closed)* | Merge commit on `main`; `reviewed` removed |
+| `reviewed` | **Integrator** (deferred) | `blocked` | `blocked` set, `reviewed` removed; `⏸️ Merge deferred` comment |
+| `blocked` | **Sprint Planner** | `ready` | `blocked` removed, `ready` restored |
+| any | **State Healer** | last-set state | Conflicting state labels removed |
+
+---
+
+## Agents
+
+GHAW includes eight specialised AI agents, each responsible for a distinct phase of the development cycle:
+
+| Agent | Trigger | Schedule | What It Does |
+| --- | --- | --- | --- |
+| **Planner** | `issues: opened`, schedule, `workflow_dispatch` | Every 6h at :00 | Analyses issues, creates `<!-- PLAN -->` implementation plans, sets `open` label |
+| **Groomer** | Schedule, `issues: unlabeled` (on `confidence/low` removal) | Every 6h at :00 | Reviews `open` issues for clarity, feasibility, scope — promotes to `ready` or marks `defocus` |
+| **Sprint Planner** | Schedule, `workflow_dispatch` | Every 6h at :01 | WSJF-ranks `ready` issues, assigns top-N to `in-progress` within `MAX_WIP` limit |
+| **Dev** | Schedule, `workflow_dispatch` | Every hour | Implements `in-progress` issues — creates branch, writes code, opens PR with `Closes #N` |
+| **CI/CD** | Schedule, `workflow_dispatch` | Every hour | Detects failing CI on open PRs, diagnoses root cause, pushes fix commits |
+| **Review** | Schedule, `workflow_dispatch` | Every hour | Reviews PRs against Definition of Done — posts `✅ Technical review passed` or `❌ Changes required` |
+| **Integrator** | Schedule, `workflow_dispatch` | Every hour | Merges approved, CI-green PRs in safe WSJF-ordered sequence using merge-commit strategy |
+| **Demo** | Schedule, `workflow_dispatch` | Every 6h at :05 | Analyses closed issues and E2E results, creates follow-up issues, posts sprint summary |
+| **State Healer** | `issues: labeled` (any state label) | Event-driven | Instantly removes conflicting state labels — keeps the one just added |
+
+---
+
+## Architecture
+
+### Workflow Overview
+
+```text
+.github/workflows/
+├── core-opencode-run.yml     # Reusable: installs OpenCode, runs agent, uploads results
+├── core-state-heal.yml       # Event-driven: enforces state label mutual exclusion
+├── ghaw-planner.yml          # Planner Agent
+├── ghaw-backlog-grooming.yml # Groomer Agent
+├── ghaw-sprint-planning.yml  # Sprint Planner Agent
+├── ghaw-dev.yml              # Dev Agent
+├── ghaw-cicd.yml             # CI/CD Agent
+├── ghaw-review.yml           # Review Agent
+├── ghaw-integrator.yml       # Integrator Agent
+├── ghaw-demo.yml             # Demo Agent
+└── ci.yml                    # Repo CI (lint + BATS tests)
+```
+
+### Agent Definitions and Commands
+
+```text
+.opencode/agent/              # Agent system prompts
+├── planner.md
+├── groomer.md
+├── dev.md
+├── review.md
+├── integrator.md
+└── demo.md
+
+.opencode/commands/           # Per-task command prompts
+├── ghaw-plan-issue.md
+├── ghaw-groom-issue.md
+├── ghaw-sprint-plan.md
+├── ghaw-dev-issue.md
+├── ghaw-review.md
+├── ghaw-integrate.md
+├── ghaw-resolve-ci-errors.md
+└── ghaw-demo.md
+```
+
+### Key Design Principles
+
+- **Agents signal via comments, workflows apply labels.** Commands explicitly instruct agents not to set state labels directly — the verify step detects signals (`✅ Technical review passed`, `⏸️ Merge deferred`) and applies labels deterministically.
+- **State healer runs independently.** No agent workflow calls the healer — it fires reactively on every `issues: labeled` event, keeping state consistent without coupling.
+- **Guards before, verification after.** Prep steps filter out issues in wrong states before the agent runs. Verify steps confirm expected outcomes after.
 
 ---
 
@@ -134,14 +215,14 @@ This design keeps reasoning in the LLM layer while using shell scripts for relia
 
 All labels follow the `key/value` namespace pattern to avoid conflicts:
 
-| Namespace | Values |
-| --- | --- |
-| `severity/` | critical, high, medium, low, trivial |
-| `priority/` | critical, high, medium, low, trivial |
-| `complexity/` | xl, l, m, s, xs |
-| `confidence/` | certain, high, medium, low, none |
-| `status/` | ready, in-progress, reviewed, blocked, defocus |
-| `type/` | bug, feature, arch, coordination, feedback, chore, docs, refactor |
+| Namespace | Values | Role |
+| --- | --- | --- |
+| *(state)* | `open`, `ready`, `in-progress`, `reviewed`, `blocked`, `defocus` | **Mutually exclusive state machine** |
+| `severity/` | `critical`, `high`, `medium`, `low`, `trivial` | WSJF scoring input |
+| `priority/` | `critical`, `high`, `medium`, `low`, `trivial` | WSJF scoring input |
+| `complexity/` | `xl`, `l`, `m`, `s`, `xs` | WSJF scoring input |
+| `confidence/` | `certain`, `high`, `medium`, `low`, `none` | Groomer gate — `confidence/low` blocks auto-promotion to `ready` |
+| `type/` | `bug`, `feature`, `arch`, `coordination`, `feedback`, `chore`, `docs`, `refactor` | Classification |
 
 Labels are created by running `make -f Makefile.ghaw setup-labels`. Without them, `gh issue edit --add-label` fails silently.
 

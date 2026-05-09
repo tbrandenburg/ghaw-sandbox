@@ -29,13 +29,38 @@ Agents run via OpenCode in GitHub Actions workflows.
 
 ```text
 .github/workflows/    → Agent workflows (Bash Prep → OpenCode Run → Bash Verify)
+                        + core-opencode-run.yml (reusable executor)
+                        + core-state-heal.yml (event-driven state label enforcer)
 .github/config/       → Runtime config (config.yml)
 .opencode/agent/      → Agent definitions (planner.md, dev.md, etc.)
-.opencode/commands/   → OpenCode command prompts
+.opencode/commands/   → OpenCode command prompts (one per task type)
 tests/                → BATS behavioral tests
 RELEASE_NOTES.md      → Release notes template (fill before publishing)
 .ghaw-version         → Current project version
 ```
+
+## State Machine — Critical Rules
+
+State labels (`open`, `ready`, `in-progress`, `reviewed`, `blocked`, `defocus`) are **mutually exclusive**.
+`core-state-heal.yml` fires on every `issues: labeled` event and removes any conflicting state labels automatically.
+
+### What each agent MUST and MUST NOT do with state labels
+
+| Agent | MUST add | MUST remove | MUST NOT touch labels |
+| --- | --- | --- | --- |
+| Planner (verify step) | `open` | `ready`, `in-progress`, `blocked`, `defocus`, `reviewed` | — |
+| Groomer → ready | `ready` | `open`, `blocked`, `in-progress`, `defocus` | — |
+| Groomer → defocus | `defocus` | `open`, `ready`, `in-progress`, `blocked` | — |
+| Sprint Planner (gate) | `open` | `ready` | — |
+| Sprint Planner (assign) | `in-progress` | `ready`, `open`, `blocked`, `reviewed` | — |
+| Dev → blocked | `blocked` | `in-progress` | — |
+| Review (verify step) | `reviewed` | `in-progress`, `ready`, `open`, `blocked` | — |
+| Integrator (post-merge) | *(none)* | `reviewed` | — |
+| Integrator (deferred) | `blocked` | `in-progress`, `ready`, `open`, `reviewed` | — |
+
+**Agents signal intent via comments; workflows apply state labels deterministically.**
+Command prompts explicitly say: do NOT call `gh issue edit` for state labels — the verify step handles it.
+This separation keeps label transitions reliable and auditable.
 
 ## Git Workflow
 
@@ -49,6 +74,20 @@ RELEASE_NOTES.md      → Release notes template (fill before publishing)
 Follow the `key/value` namespace pattern. See README.md#label-taxonomy for the full table.
 Key namespaces: `severity/`, `priority/`, `complexity/`, `confidence/`, `type/`
 
+State labels (no namespace prefix): `open`, `ready`, `in-progress`, `reviewed`, `blocked`, `defocus`
+
+## Three-Phase Workflow Pattern
+
+Every agent workflow follows this structure — never skip or reorder phases:
+
+```text
+Bash Preparation  →  OpenCode Run (core-opencode-run.yml)  →  Bash Verification
+```
+
+- **Prep:** collect context via `gh` CLI, filter out issues in wrong states, build prompt
+- **Run:** LLM reasons and acts; outputs signals via comments (not labels)
+- **Verify:** detect signal comments, apply label transitions, assert expected outcomes
+
 ## Code Style
 
 - **YAML:** 2-space indent, validated with `yamllint`
@@ -60,6 +99,7 @@ Key namespaces: `severity/`, `priority/`, `complexity/`, `confidence/`, `type/`
 - **Never** commit secrets, API keys, or `.env` files
 - **Never** modify `.github/workflows/` without understanding the three-phase pattern
 - **Never** edit `node_modules/` — it is managed by package.json
+- **Never** apply state labels directly in agent code — use the comment signal pattern
 - **Always** use `make -f Makefile.ghaw` targets for label/config changes — not raw `gh` calls
 - **Always** follow the existing `.PHONY` and define patterns when adding Makefile targets
 
