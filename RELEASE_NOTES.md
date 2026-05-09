@@ -5,22 +5,20 @@
 
 ## Features
 
-- <!-- Describe new features added in this release -->
+- None
 
 ## Fixes
 
-- <!-- Describe bug fixes and improvements -->
+- Sprint planner: filter out `reviewed` issues from candidates in the prep step (before LLM runs), closing the window where the LLM could assign `in-progress` to an issue already awaiting merge (L6)
 
 ## Breaking Changes
 
-- <!-- List any breaking changes with migration guidance -->
-- <!-- If none, write "None" -->
+- None
 
 ## Upgrade / Migration Notes
 
-- <!-- Instructions for users upgrading from the previous version -->
-- <!-- If none required, write "None" -->
+- None
 
 ## Commits
 
-For full commit details, see the [changelog](CHANGELOG-link).
+For full commit details, see the [commit history](https://github.com/tbrandenburg/ghaw-sandbox/commits/main).

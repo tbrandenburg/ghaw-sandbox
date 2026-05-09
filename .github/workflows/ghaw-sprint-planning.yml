@@ -29,6 +29,10 @@ jobs:
             --repo ${{ github.repository }} \
             --label ready \
             --json number,title,labels,comments)
+          # Exclude issues also carrying reviewed — they have a PR awaiting merge
+          READY=$(echo "$READY" | jq '[.[] | select(
+            ([.labels[].name] | contains(["reviewed"])) | not
+          )]')
           BLOCKED=$(gh issue list \
             --repo ${{ github.repository }} \
             --label blocked \
