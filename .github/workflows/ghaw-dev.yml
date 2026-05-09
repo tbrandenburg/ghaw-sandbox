@@ -60,6 +60,17 @@ jobs:
 
           CANDIDATES=$(echo "$NO_PR $NEEDS_FIX" | jq -s 'add | unique_by(.number)')
 
+          # Guard: reject candidates carrying both in-progress and blocked simultaneously
+          AMBIGUOUS=$(echo "$CANDIDATES" | jq '[.[] | select(
+            ([.labels[].name] | contains(["in-progress"])) and
+            ([.labels[].name] | contains(["blocked"]))
+          ) | .number]')
+          COUNT_AMB=$(echo "$AMBIGUOUS" | jq length)
+          if [ "$COUNT_AMB" -gt "0" ]; then
+            echo "❌ Ambiguous state (in-progress+blocked) on issues: $AMBIGUOUS — fix label state before dev agent runs." >&2
+            exit 1
+          fi
+
           COUNT=$(echo "$CANDIDATES" | jq length)
           if [ "$COUNT" = "0" ]; then
             echo "has_candidates=false" >> $GITHUB_OUTPUT
@@ -135,3 +146,17 @@ jobs:
             fi
           done
           exit $FAILED
+
+      - name: Assert no in-progress+blocked overlap
+        run: |
+          AMBIGUOUS=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label in-progress \
+            --label blocked \
+            --json number --jq '[.[].number]')
+          COUNT_AMB=$(echo "$AMBIGUOUS" | jq length)
+          if [ "$COUNT_AMB" -gt "0" ]; then
+            echo "❌ Ambiguous state (in-progress+blocked): $AMBIGUOUS" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "✅ State clean — no in-progress+blocked overlap" >> $GITHUB_STEP_SUMMARY

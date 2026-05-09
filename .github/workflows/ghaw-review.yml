@@ -145,3 +145,16 @@ jobs:
               echo "PR #$PR: no passing review detected (decision: $DECISION)" >> $GITHUB_STEP_SUMMARY
             fi
           done
+
+          # Verify: no issue should carry reviewed+in-progress simultaneously
+          AMBIGUOUS=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label reviewed \
+            --label in-progress \
+            --json number --jq '[.[].number]')
+          COUNT_AMB=$(echo "$AMBIGUOUS" | jq length)
+          if [ "$COUNT_AMB" -gt "0" ]; then
+            echo "❌ Ambiguous state (reviewed+in-progress): $AMBIGUOUS" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "✅ State clean — no reviewed+in-progress overlap" >> $GITHUB_STEP_SUMMARY

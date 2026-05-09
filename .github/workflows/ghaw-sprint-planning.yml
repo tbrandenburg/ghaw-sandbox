@@ -91,8 +91,15 @@ jobs:
               --json comments \
               --jq '[.comments[].body | contains("<!-- PLAN -->")] | any')
             if [ "$HAS_PLAN" != "true" ]; then
+              echo "⏭️ #$NUMBER skipped — no implementation plan. Planner Agent will create one." >> $GITHUB_STEP_SUMMARY
               gh issue comment $NUMBER \
+                --repo ${{ github.repository }} \
                 --body "⏭️ Sprint Planning skipped: missing implementation plan. Planner Agent will create one."
+              # Remove from candidates by removing ready label so sprint planner ignores it
+              gh issue edit $NUMBER \
+                --repo ${{ github.repository }} \
+                --remove-label "ready" \
+                --add-label "open"
             fi
           done
 
@@ -166,3 +173,16 @@ jobs:
             echo "✅ #$NUMBER → in-progress" >> $GITHUB_STEP_SUMMARY
             ASSIGNED=$(( ASSIGNED + 1 ))
           done
+
+          # Verify: no issue should carry ready+in-progress simultaneously
+          AMBIGUOUS=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label ready \
+            --label in-progress \
+            --json number --jq '[.[].number]')
+          COUNT_AMB=$(echo "$AMBIGUOUS" | jq length)
+          if [ "$COUNT_AMB" -gt "0" ]; then
+            echo "❌ Ambiguous state (ready+in-progress): $AMBIGUOUS" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "✅ State clean — no ready+in-progress overlap" >> $GITHUB_STEP_SUMMARY

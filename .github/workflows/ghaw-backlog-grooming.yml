@@ -40,6 +40,12 @@ jobs:
               --jq 'sort_by(.updatedAt) | .[0:10]')
           fi
 
+          # Guard: only groom issues in state open — skip any already past that
+          ISSUES=$(echo "$ISSUES" | jq '[.[] | select(
+            ([.labels[].name] | contains(["ready"]) or contains(["in-progress"]) or
+             contains(["reviewed"]) or contains(["blocked"]) or contains(["defocus"])) | not
+          )]')
+
           COUNT=$(echo "$ISSUES" | jq length)
           if [ "$COUNT" = "0" ]; then
             echo "has_issues=false" >> $GITHUB_OUTPUT
@@ -110,3 +116,16 @@ jobs:
               echo "⏳ #$NUMBER → PO handoff required (confidence/low or complexity/high)" >> $GITHUB_STEP_SUMMARY
             fi
           done
+
+          # Verify: no issue should carry open+ready simultaneously
+          AMBIGUOUS=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label open \
+            --label ready \
+            --json number --jq '[.[].number]')
+          COUNT_AMB=$(echo "$AMBIGUOUS" | jq length)
+          if [ "$COUNT_AMB" -gt "0" ]; then
+            echo "❌ Ambiguous state detected (open+ready): $AMBIGUOUS" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "✅ State clean — no open+ready overlap" >> $GITHUB_STEP_SUMMARY
