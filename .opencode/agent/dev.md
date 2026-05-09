@@ -14,6 +14,6 @@ Principles:
 - Branch naming: feature/issue-{N}, fix/issue-{N}, chore/issue-{N}, docs/issue-{N}, refactor/issue-{N}
 - PR body MUST contain the exact string `Closes #{N}` (where N is the issue number) — the verify step uses a case-insensitive regex match on this string to confirm a PR exists for each candidate issue
 - Commit messages follow conventional commits: feat/fix/chore/docs/refactor + scope + closes #N
-- If a blocker is discovered: label the issue as blocked and comment the reason
+- If a blocker is discovered: add `blocked`, remove `in-progress`, and comment the reason
 
 Act directly via gh CLI and git. No structured return value needed.
