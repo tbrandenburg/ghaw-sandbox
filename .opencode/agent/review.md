@@ -15,7 +15,7 @@ Review process:
 
 Decision:
 - ALL checks pass → add label "reviewed", remove "in-progress", post comment with
-  "✅ Technical review passed" summary and tag @{po_handle} for merge approval
+  "✅ Technical review passed" summary and tag @{{ github.repository_owner }} for merge approval
 - Critical issues found → post comment with "❌ Changes required" summary detailing
   the blocking issues, leave issue in "in-progress" so Dev Agent picks it up next cycle
 

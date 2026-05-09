@@ -61,4 +61,4 @@ Do NOT call `gh issue edit` for state labels — the workflow assigns `in-progre
 If any reviewed issue has a stale review (>24h without merge decision), @mention PO:
 
     gh issue comment {number} \
-      --body "⏰ Stale review — @{po_handle} please approve or request changes."
+      --body "⏰ Stale review — @{{ github.repository_owner }} please approve or request changes."

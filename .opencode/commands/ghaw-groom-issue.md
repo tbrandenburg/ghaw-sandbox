@@ -50,7 +50,21 @@ If soft blocker: leave the issue as-is with no changes. The planner agent handle
 
 Process each non-blocked issue in the input JSON sequentially.
 
-### Step 1: Clarity Check
+### Step 1: Timeout Defocus Check
+
+If the issue already has the `confidence/low` label:
+
+1. Find the most recent grooming question comment (a comment containing "please reply to this comment with your answers").
+2. Check whether any comment from the repo owner was posted **after** that grooming comment.
+3. If no reply from the repo owner exists and the grooming comment is **older than 3 days**, defocus and close the issue:
+
+       gh issue edit {number} --add-label "defocus" --remove-label "open" --remove-label "confidence/low"
+       gh issue comment {number} --body "⏰ Defocused: no response received after 3 days. Closing until scope is clarified."
+       gh issue close {number} --reason "not planned"
+
+   Then **skip** all remaining steps for this issue.
+
+### Step 2: Clarity Check
 
 Read the issue description and comments.
 
@@ -61,11 +75,11 @@ If acceptance criteria are missing or ambiguous:
       - {question 1}
       - {question 2}
 
-      @{po_handle} — please reply to this comment with your answers, then remove the \`confidence/low\` label to trigger re-assessment."
+      @{{ github.repository_owner }} — please reply to this comment with your answers, then remove the \`confidence/low\` label to trigger re-assessment."
 
     gh issue edit {number} --add-label "confidence/low"
 
-### Step 2: Defocus Check
+### Step 3: Defocus Check
 
 If the issue is out-of-scope, not actionable, or duplicates another issue:
 
@@ -73,7 +87,7 @@ If the issue is out-of-scope, not actionable, or duplicates another issue:
     gh issue comment {number} --body "⚠️ Grooming: Marked as defocus. Reason: {reason}"
     gh issue close {number} --reason "not planned"
 
-### Step 3: Feasibility Review
+### Step 4: Feasibility Review
 
 Use file-read tools to explore relevant code areas mentioned in the issue.
 
@@ -82,7 +96,7 @@ If architectural conflict or missing dependency found:
     gh issue comment {number} \
       --body "⚠️ Feasibility concern: {description of conflict or missing dependency}"
 
-### Step 4: Story Splitting
+### Step 5: Story Splitting
 
 If the issue scope is too large for a single sprint (complexity/high and multiple independent concerns):
 
@@ -97,7 +111,7 @@ Add summary to parent:
 
     gh issue comment {number} --body "📦 Split into sub-issues: #{new1}, #{new2}, ..."
 
-### Step 5: Re-evaluate Labels
+### Step 6: Re-evaluate Labels
 
 If severity or priority labels are incorrect based on current understanding:
 
@@ -105,13 +119,13 @@ If severity or priority labels are incorrect based on current understanding:
       --add-label "severity/{new}" \
       --remove-label "severity/{old}"
 
-### Step 6: PO Handoff (if needed)
+### Step 7: PO Handoff (if needed)
 
 After completing all grooming checks, if the issue was NOT defocused and NOT flagged with unresolved questions, and has `confidence/low` OR `complexity/high`:
 
     gh issue comment {number} \
       --body "✅ Grooming complete. Confidence or complexity requires PO review before sprint planning.
 
-      @{po_handle} — please review and add the \`ready\` label when satisfied."
+      @{{ github.repository_owner }} — please review and add the \`ready\` label when satisfied."
 
 Do NOT call `gh issue edit` for `ready` or `open` labels — the workflow handles promotion reliably based on label data.

@@ -46,7 +46,6 @@ Edit `.github/config/config.yml` with your settings:
 ```yaml
 max_wip: 1
 model: opencode/big-pickle
-po_handle: "@your-github-handle"
 e2e_command: "npm run test:e2e"   # optional — remove if not applicable
 ```
 

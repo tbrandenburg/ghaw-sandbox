@@ -75,7 +75,8 @@ jobs:
       - name: Build prompt
         id: build
         run: |
-          PROMPT="Ready issues: $READY_JSON
+          PROMPT="Repo owner: @${{ github.repository_owner }}
+          Ready issues: $READY_JSON
           Blocked issues: $BLOCKED_JSON
           Open PRs: $OPEN_PRS_JSON
           MAX_WIP: $MAX_WIP

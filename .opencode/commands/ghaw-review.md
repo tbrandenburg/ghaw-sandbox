@@ -57,7 +57,7 @@ For any issue found that is outside this PR's scope:
 **If all checks pass:**
 
     gh pr comment {pr} \
-      --body "## Review Summary\n\n✅ Technical review passed. All acceptance criteria met and DoD satisfied.\n\n### Verification Results:\n{bullet list of checks}\n\n### Definition of Done Checklist:\n{checklist}\n\n@{po_handle} — please review and approve this PR for merge when ready."
+      --body "## Review Summary\n\n✅ Technical review passed. All acceptance criteria met and DoD satisfied.\n\n### Verification Results:\n{bullet list of checks}\n\n### Definition of Done Checklist:\n{checklist}\n\n      @{{ github.repository_owner }} — please review and approve this PR for merge when ready."
 
 Do NOT call `gh issue edit` for state labels — the workflow detects the review summary comment and applies `reviewed` reliably.
 

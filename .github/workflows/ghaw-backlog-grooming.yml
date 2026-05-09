@@ -13,6 +13,7 @@ jobs:
     outputs:
       has_issues: ${{ steps.fetch.outputs.has_issues }}
       issues_json: ${{ steps.fetch.outputs.issues_json }}
+      repo_owner: ${{ steps.fetch.outputs.repo_owner }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -46,6 +47,7 @@ jobs:
           else
             echo "has_issues=true" >> $GITHUB_OUTPUT
             echo "issues_json=$(echo $ISSUES | jq -c .)" >> $GITHUB_OUTPUT
+            echo "repo_owner=${{ github.repository_owner }}" >> $GITHUB_OUTPUT
           fi
 
   run-groomer:
@@ -55,7 +57,7 @@ jobs:
     with:
       run-name: backlog-groomer
       command:  ghaw-groom-issue
-      prompt:   ${{ needs.prepare.outputs.issues_json }}
+      prompt:   "Repo owner: @${{ needs.prepare.outputs.repo_owner }}\nIssues: ${{ needs.prepare.outputs.issues_json }}"
       agent:    groomer
       model:    opencode/big-pickle
       timeout-minutes: 50

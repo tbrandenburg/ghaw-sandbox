@@ -84,7 +84,8 @@ jobs:
       - name: Build prompt
         id: build
         run: |
-          PROMPT="PRs to review: $REVIEW_DATA"
+          PROMPT="Repo owner: @${{ github.repository_owner }}
+          PRs to review: $REVIEW_DATA"
           echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
 
   run-review:
