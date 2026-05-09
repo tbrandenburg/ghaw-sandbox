@@ -1,0 +1,114 @@
+name: Core - Issue State Healer
+
+# Reusable workflow: detects ambiguous state labels on issues and heals them
+# by keeping only the label that was set last (via issue events API).
+#
+# State labels (mutually exclusive): open, ready, in-progress, reviewed, blocked, defocus
+#
+# Usage:
+#   uses: ./.github/workflows/core-state-heal.yml
+#   with:
+#     issue-numbers: "12 34 56"   # space-separated list, or "all" to scan all open issues
+
+on:
+  workflow_call:
+    inputs:
+      issue-numbers:
+        description: 'Space-separated issue numbers to heal, or "all" to scan all open issues'
+        required: true
+        type: string
+    outputs:
+      healed:
+        description: 'Space-separated list of issue numbers that were healed'
+        value: ${{ jobs.heal.outputs.healed }}
+      ambiguous-found:
+        description: 'true if any ambiguous issue was found'
+        value: ${{ jobs.heal.outputs.ambiguous-found }}
+
+jobs:
+  heal:
+    runs-on: ubuntu-latest
+    outputs:
+      healed:          ${{ steps.heal.outputs.healed }}
+      ambiguous-found: ${{ steps.heal.outputs.ambiguous-found }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      STATE_LABELS: "open ready in-progress reviewed blocked defocus"
+    steps:
+      - name: Heal ambiguous issue state labels
+        id: heal
+        run: |
+          set -euo pipefail
+
+          STATE_LABELS="open ready in-progress reviewed blocked defocus"
+          REPO="${{ github.repository }}"
+          INPUT="${{ inputs.issue-numbers }}"
+          HEALED=""
+          AMBIGUOUS_FOUND=false
+
+          if [ "$INPUT" = "all" ]; then
+            NUMBERS=$(gh issue list \
+              --repo "$REPO" \
+              --state open \
+              --limit 200 \
+              --json number \
+              --jq '[.[].number] | join(" ")')
+          else
+            NUMBERS="$INPUT"
+          fi
+
+          for NUMBER in $NUMBERS; do
+            # Fetch current labels on this issue
+            CURRENT=$(gh api "repos/$REPO/issues/$NUMBER" \
+              --jq '[.labels[].name]')
+
+            # Count how many state labels are currently set
+            STATE_COUNT=$(echo "$CURRENT" | jq \
+              --argjson states '["open","ready","in-progress","reviewed","blocked","defocus"]' \
+              '[.[] | select(. as $l | $states | index($l) != null)] | length')
+
+            if [ "$STATE_COUNT" -le "1" ]; then
+              continue  # clean — nothing to do
+            fi
+
+            AMBIGUOUS_FOUND=true
+            echo "⚠️  Issue #$NUMBER has $STATE_COUNT state labels: $(echo "$CURRENT" | jq -r 'join(", ")')" >> $GITHUB_STEP_SUMMARY
+
+            # Find the last-set state label via events API (chronological order, take last)
+            LAST_STATE=$(gh api "repos/$REPO/issues/$NUMBER/events" \
+              --paginate \
+              --jq '
+                [.[] |
+                  select(.event == "labeled") |
+                  select(.label.name | IN("open","ready","in-progress","reviewed","blocked","defocus"))
+                ] | last | .label.name // empty')
+
+            if [ -z "$LAST_STATE" ]; then
+              echo "  ⚠️  Could not determine last-set state for #$NUMBER — skipping" >> $GITHUB_STEP_SUMMARY
+              continue
+            fi
+
+            echo "  → Keeping \`$LAST_STATE\`, removing others" >> $GITHUB_STEP_SUMMARY
+
+            # Remove all state labels except the last one set
+            for LABEL in $STATE_LABELS; do
+              [ "$LABEL" = "$LAST_STATE" ] && continue
+              IS_SET=$(echo "$CURRENT" | jq --arg l "$LABEL" 'contains([$l])')
+              [ "$IS_SET" = "true" ] && \
+                gh issue edit "$NUMBER" --repo "$REPO" --remove-label "$LABEL" 2>/dev/null || true
+            done
+
+            HEALED="$HEALED $NUMBER"
+            echo "  ✅ #$NUMBER healed → \`$LAST_STATE\`" >> $GITHUB_STEP_SUMMARY
+          done
+
+          HEALED=$(echo "$HEALED" | xargs)  # trim whitespace
+          echo "healed=$HEALED"          >> $GITHUB_OUTPUT
+          echo "ambiguous-found=$AMBIGUOUS_FOUND" >> $GITHUB_OUTPUT
+
+          if [ "$AMBIGUOUS_FOUND" = "true" ]; then
+            echo "### State Healer Summary" >> $GITHUB_STEP_SUMMARY
+            echo "Healed issues: ${HEALED:-none}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ All issues have clean state labels" >> $GITHUB_STEP_SUMMARY
+          fi

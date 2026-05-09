@@ -6,11 +6,20 @@ on:
   workflow_dispatch:
 
 jobs:
+  heal-before:
+    uses: ./.github/workflows/core-state-heal.yml
+    with:
+      issue-numbers: all
+    permissions:
+      issues: write
+
   prepare:
+    needs: heal-before
     runs-on: ubuntu-latest
     outputs:
       has_candidates: ${{ steps.filter.outputs.has_candidates }}
       prompt:         ${{ steps.build.outputs.prompt }}
+      candidate_numbers: ${{ steps.filter.outputs.candidate_numbers }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -60,22 +69,13 @@ jobs:
 
           CANDIDATES=$(echo "$NO_PR $NEEDS_FIX" | jq -s 'add | unique_by(.number)')
 
-          # Guard: reject candidates carrying both in-progress and blocked simultaneously
-          AMBIGUOUS=$(echo "$CANDIDATES" | jq '[.[] | select(
-            ([.labels[].name] | contains(["in-progress"])) and
-            ([.labels[].name] | contains(["blocked"]))
-          ) | .number]')
-          COUNT_AMB=$(echo "$AMBIGUOUS" | jq length)
-          if [ "$COUNT_AMB" -gt "0" ]; then
-            echo "❌ Ambiguous state (in-progress+blocked) on issues: $AMBIGUOUS — fix label state before dev agent runs." >&2
-            exit 1
-          fi
-
           COUNT=$(echo "$CANDIDATES" | jq length)
           if [ "$COUNT" = "0" ]; then
             echo "has_candidates=false" >> $GITHUB_OUTPUT
           else
             echo "has_candidates=true" >> $GITHUB_OUTPUT
+            NUMBERS=$(echo "$CANDIDATES" | jq -r '[.[].number] | join(" ")')
+            echo "candidate_numbers=$NUMBERS" >> $GITHUB_OUTPUT
           fi
 
           {
@@ -147,16 +147,11 @@ jobs:
           done
           exit $FAILED
 
-      - name: Assert no in-progress+blocked overlap
-        run: |
-          AMBIGUOUS=$(gh issue list \
-            --repo ${{ github.repository }} \
-            --label in-progress \
-            --label blocked \
-            --json number --jq '[.[].number]')
-          COUNT_AMB=$(echo "$AMBIGUOUS" | jq length)
-          if [ "$COUNT_AMB" -gt "0" ]; then
-            echo "❌ Ambiguous state (in-progress+blocked): $AMBIGUOUS" >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
-          echo "✅ State clean — no in-progress+blocked overlap" >> $GITHUB_STEP_SUMMARY
+  heal-after:
+    needs: [prepare, verify]
+    if: always() && needs.prepare.outputs.has_candidates == 'true'
+    uses: ./.github/workflows/core-state-heal.yml
+    with:
+      issue-numbers: ${{ needs.prepare.outputs.candidate_numbers }}
+    permissions:
+      issues: write

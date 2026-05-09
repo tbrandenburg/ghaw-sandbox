@@ -6,7 +6,15 @@ on:
   workflow_dispatch:
 
 jobs:
+  heal-before:
+    uses: ./.github/workflows/core-state-heal.yml
+    with:
+      issue-numbers: all
+    permissions:
+      issues: write
+
   prepare:
+    needs: heal-before
     runs-on: ubuntu-latest
     outputs:
       has_candidates: ${{ steps.fetch.outputs.has_candidates }}
@@ -174,15 +182,11 @@ jobs:
             ASSIGNED=$(( ASSIGNED + 1 ))
           done
 
-          # Verify: no issue should carry ready+in-progress simultaneously
-          AMBIGUOUS=$(gh issue list \
-            --repo ${{ github.repository }} \
-            --label ready \
-            --label in-progress \
-            --json number --jq '[.[].number]')
-          COUNT_AMB=$(echo "$AMBIGUOUS" | jq length)
-          if [ "$COUNT_AMB" -gt "0" ]; then
-            echo "❌ Ambiguous state (ready+in-progress): $AMBIGUOUS" >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
-          echo "✅ State clean — no ready+in-progress overlap" >> $GITHUB_STEP_SUMMARY
+  heal-after:
+    needs: [prepare, summary]
+    if: always() && needs.prepare.outputs.has_candidates == 'true'
+    uses: ./.github/workflows/core-state-heal.yml
+    with:
+      issue-numbers: all
+    permissions:
+      issues: write

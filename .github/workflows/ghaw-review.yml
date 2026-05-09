@@ -146,15 +146,11 @@ jobs:
             fi
           done
 
-          # Verify: no issue should carry reviewed+in-progress simultaneously
-          AMBIGUOUS=$(gh issue list \
-            --repo ${{ github.repository }} \
-            --label reviewed \
-            --label in-progress \
-            --json number --jq '[.[].number]')
-          COUNT_AMB=$(echo "$AMBIGUOUS" | jq length)
-          if [ "$COUNT_AMB" -gt "0" ]; then
-            echo "❌ Ambiguous state (reviewed+in-progress): $AMBIGUOUS" >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
-          echo "✅ State clean — no reviewed+in-progress overlap" >> $GITHUB_STEP_SUMMARY
+  heal-after:
+    needs: [prepare, verify]
+    if: always() && needs.prepare.outputs.has_candidates == 'true'
+    uses: ./.github/workflows/core-state-heal.yml
+    with:
+      issue-numbers: all
+    permissions:
+      issues: write
