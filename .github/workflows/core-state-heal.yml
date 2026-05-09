@@ -74,14 +74,14 @@ jobs:
             AMBIGUOUS_FOUND=true
             echo "⚠️  Issue #$NUMBER has $STATE_COUNT state labels: $(echo "$CURRENT" | jq -r 'join(", ")')" >> $GITHUB_STEP_SUMMARY
 
-            # Find the last-set state label via events API (chronological order, take last)
+            # Find the last-set state label via events API.
+            # --paginate with --jq filters per page, so we collect raw JSON across
+            # all pages first, then merge and find the global last labeled event.
             LAST_STATE=$(gh api "repos/$REPO/issues/$NUMBER/events" \
               --paginate \
-              --jq '
-                [.[] |
-                  select(.event == "labeled") |
-                  select(.label.name | IN("open","ready","in-progress","reviewed","blocked","defocus"))
-                ] | last | .label.name // empty')
+              --jq '[.[] | select(.event == "labeled") | select(.label.name | IN("open","ready","in-progress","reviewed","blocked","defocus"))]' \
+              | jq -s 'add // [] | last | .label.name // empty' \
+              | tr -d '"')
 
             if [ -z "$LAST_STATE" ]; then
               echo "  ⚠️  Could not determine last-set state for #$NUMBER — skipping" >> $GITHUB_STEP_SUMMARY
