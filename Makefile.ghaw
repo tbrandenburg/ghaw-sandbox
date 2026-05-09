@@ -236,48 +236,6 @@ endef
 # CORE SETUP LOGIC
 # =============================================================================
 
-define RUN_LABELS
-$(REQUIRE_TOOLS)
-$(REQUIRE_REPO)
-echo "$(1) labels in: $(REPO)"
-echo ""
-echo "Workflow states:"
-for spec in $(WORKFLOW_SPECS); do \
-  IFS='|' read -r n c d <<< "$$spec"; \
-  $(if $(filter dry,$(1)),$(call DRYRUN_LABEL,$$n,$$c,$$d),$(call APPLY_LABEL,$$n,$$c,$$d)); \
-done
-echo ""
-echo "Severity:"
-for spec in $(SEVERITY_SPECS); do \
-  IFS='|' read -r n c d <<< "$$spec"; \
-  $(if $(filter dry,$(1)),$(call DRYRUN_LABEL,$$n,$$c,$$d),$(call APPLY_LABEL,$$n,$$c,$$d)); \
-done
-echo ""
-echo "Priority:"
-for spec in $(PRIORITY_SPECS); do \
-  IFS='|' read -r n c d <<< "$$spec"; \
-  $(if $(filter dry,$(1)),$(call DRYRUN_LABEL,$$n,$$c,$$d),$(call APPLY_LABEL,$$n,$$c,$$d)); \
-done
-echo ""
-echo "Complexity:"
-for spec in $(COMPLEXITY_SPECS); do \
-  IFS='|' read -r n c d <<< "$$spec"; \
-  $(if $(filter dry,$(1)),$(call DRYRUN_LABEL,$$n,$$c,$$d),$(call APPLY_LABEL,$$n,$$c,$$d)); \
-done
-echo ""
-echo "Confidence:"
-for spec in $(CONFIDENCE_SPECS); do \
-  IFS='|' read -r n c d <<< "$$spec"; \
-  $(if $(filter dry,$(1)),$(call DRYRUN_LABEL,$$n,$$c,$$d),$(call APPLY_LABEL,$$n,$$c,$$d)); \
-done
-echo ""
-echo "Type:"
-for spec in $(TYPE_SPECS); do \
-  IFS='|' read -r n c d <<< "$$spec"; \
-  $(if $(filter dry,$(1)),$(call DRYRUN_LABEL,$$n,$$c,$$d),$(call APPLY_LABEL,$$n,$$c,$$d)); \
-done
-endef
-
 # =============================================================================
 # PUBLIC TARGETS
 # =============================================================================
