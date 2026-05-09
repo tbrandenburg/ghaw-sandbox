@@ -9,7 +9,7 @@
   "T2": {
     "status": "done",
     "evidence": [
-      "grep -n reviewed ghaw-sprint-planning.yml → line 167-170: IS_REVIEWED guard skips reviewed issues before label assignment"
+      "grep -n reviewed ghaw-sprint-planning.yml → lines 166-171: IS_REVIEWED guard skips reviewed issues before label assignment"
     ],
     "last_verified": "2026-05-09T00:00:00Z"
   },
@@ -28,8 +28,10 @@
     "last_verified": "2026-05-09T00:00:00Z"
   },
   "T5": {
-    "status": "in_progress",
-    "evidence": [],
-    "last_verified": null
+    "status": "done",
+    "evidence": [
+      "grep -n 'label open' ghaw-backlog-grooming.yml → line 38: --label open replaces --state open; bash filter removed"
+    ],
+    "last_verified": "2026-05-09T00:00:00Z"
   }
 }
