@@ -123,59 +123,62 @@ CYAN        := 00FFFF
 # =============================================================================
 
 # --- Workflow states ---
-WORKFLOW_SPECS := \
-	open|$(LIGHT_BLUE)|New or unrefined work. Collaborative grooming allowed. \
-	ready|$(GREEN)|Definition of Ready met. Pullable by dev team (PO gate). \
-	in-progress|$(YELLOW)|Work pulled by team; implementation underway. \
-	reviewed|$(BLUE)|PR approved + CI green. Awaiting PO merge approval. \
-	blocked|$(RED)|Work is blocked by an external dependency or issue. \
-	defocus|$(GREY)|Out of scope or not actionable — deferred by groomer.
+define WORKFLOW_SPECS
+open|$(LIGHT_BLUE)|New or unrefined work. Collaborative grooming allowed.
+ready|$(GREEN)|Definition of Ready met. Pullable by dev team (PO gate).
+in-progress|$(YELLOW)|Work pulled by team; implementation underway.
+reviewed|$(BLUE)|PR approved + CI green. Awaiting PO merge approval.
+blocked|$(RED)|Work is blocked by an external dependency or issue.
+defocus|$(GREY)|Out of scope or not actionable — deferred by groomer.
+endef
 
 # --- Severity (impact-based) ---
-SEVERITY_SPECS := \
-	severity/critical|$(DARK_RED)|Critical severity — system failure or data loss \
-	severity/high|$(DARK_ORANGE)|High severity — significant impact on functionality \
-	severity/medium|$(YELLOW)|Medium severity — limited impact or workaround exists \
-	severity/low|$(GREEN)|Low severity — cosmetic or documentation issues \
-	severity/trivial|$(GREY)|Trivial severity — negligible impact
+define SEVERITY_SPECS
+severity/critical|$(DARK_RED)|Critical severity — system failure or data loss
+severity/high|$(DARK_ORANGE)|High severity — significant impact on functionality
+severity/medium|$(YELLOW)|Medium severity — limited impact or workaround exists
+severity/low|$(GREEN)|Low severity — cosmetic or documentation issues
+severity/trivial|$(GREY)|Trivial severity — negligible impact
+endef
 
 # --- Priority (urgency-based) ---
-PRIORITY_SPECS := \
-	priority/critical|$(DARK_RED)|Critical priority — urgent attention required \
-	priority/high|$(ORANGE)|High priority — address in current sprint \
-	priority/medium|$(YELLOW)|Normal priority — standard workflow \
-	priority/low|$(DARK_GREEN)|Low priority — can be deferred if needed \
-	priority/trivial|$(GREY)|Trivial priority — address opportunistically
+define PRIORITY_SPECS
+priority/critical|$(DARK_RED)|Critical priority — urgent attention required
+priority/high|$(ORANGE)|High priority — address in current sprint
+priority/medium|$(YELLOW)|Normal priority — standard workflow
+priority/low|$(DARK_GREEN)|Low priority — can be deferred if needed
+priority/trivial|$(GREY)|Trivial priority — address opportunistically
+endef
 
 # --- Complexity (SAFe Fibonacci job size) ---
-COMPLEXITY_SPECS := \
-	complexity/xl|$(DARK_RED)|XL complexity — SAFe Fibonacci 13 \
-	complexity/l|$(RED)|L complexity — SAFe Fibonacci 8 \
-	complexity/m|$(YELLOW)|M complexity — SAFe Fibonacci 5 \
-	complexity/s|$(GREEN)|S complexity — SAFe Fibonacci 3 \
-	complexity/xs|$(DARK_GREEN)|XS complexity — SAFe Fibonacci 1
+define COMPLEXITY_SPECS
+complexity/xl|$(DARK_RED)|XL complexity — SAFe Fibonacci 13
+complexity/l|$(RED)|L complexity — SAFe Fibonacci 8
+complexity/m|$(YELLOW)|M complexity — SAFe Fibonacci 5
+complexity/s|$(GREEN)|S complexity — SAFe Fibonacci 3
+complexity/xs|$(DARK_GREEN)|XS complexity — SAFe Fibonacci 1
+endef
 
 # --- Confidence (certainty about approach) ---
-CONFIDENCE_SPECS := \
-	confidence/certain|$(DARK_GREEN)|Certain — fully understood, minimal risk \
-	confidence/high|$(GREEN)|High confidence — well understood, low risk \
-	confidence/medium|$(YELLOW)|Medium confidence — some uncertainty, moderate risk \
-	confidence/low|$(ORANGE)|Low confidence — high uncertainty, significant unknowns \
-	confidence/none|$(DARK_RED)|No confidence — approach unclear, needs spike
+define CONFIDENCE_SPECS
+confidence/certain|$(DARK_GREEN)|Certain — fully understood, minimal risk
+confidence/high|$(GREEN)|High confidence — well understood, low risk
+confidence/medium|$(YELLOW)|Medium confidence — some uncertainty, moderate risk
+confidence/low|$(ORANGE)|Low confidence — high uncertainty, significant unknowns
+confidence/none|$(DARK_RED)|No confidence — approach unclear, needs spike
+endef
 
 # --- Type ---
-TYPE_SPECS := \
-	type/bug|$(RED)|Bug — something is broken \
-	type/feature|$(LIGHT_GREEN)|Feature — new functionality \
-	type/arch|$(YELLOW)|Architecture — structural change \
-	type/coordination|$(CYAN)|Coordination — merge conflict or dependency tracking \
-	type/feedback|$(PURPLE)|Feedback — from demo or review \
-	type/chore|$(GREY)|Chore — maintenance, no user-visible change \
-	type/docs|$(BLUE)|Documentation — docs only \
-	type/refactor|$(ORANGE)|Refactor — code restructuring without behaviour change
-
-ALL_LABEL_SPECS := $(WORKFLOW_SPECS) $(SEVERITY_SPECS) $(PRIORITY_SPECS) \
-                   $(COMPLEXITY_SPECS) $(CONFIDENCE_SPECS) $(TYPE_SPECS)
+define TYPE_SPECS
+type/bug|$(RED)|Bug — something is broken
+type/feature|$(LIGHT_GREEN)|Feature — new functionality
+type/arch|$(YELLOW)|Architecture — structural change
+type/coordination|$(CYAN)|Coordination — merge conflict or dependency tracking
+type/feedback|$(PURPLE)|Feedback — from demo or review
+type/chore|$(GREY)|Chore — maintenance, no user-visible change
+type/docs|$(BLUE)|Documentation — docs only
+type/refactor|$(ORANGE)|Refactor — code restructuring without behaviour change
+endef
 
 # =============================================================================
 # LABEL MANAGEMENT — IDEMPOTENT CORE
@@ -337,8 +340,8 @@ setup-labels:
 	@echo "Applying labels to: $(REPO)"
 	@echo ""
 	@echo "Workflow states:"
-	@for spec in $(WORKFLOW_SPECS); do \
-	  IFS='|' read -r n c d <<< "$$spec"; \
+	@while IFS='|' read -r n c d; do \
+	  [ -z "$$n" ] && continue; \
 	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
 	  if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
 	    echo "  UPDATE  $$n"; \
@@ -349,11 +352,12 @@ setup-labels:
 	    gh api -X POST "repos/$(REPO)/labels" \
 	      -f name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
 	  fi; \
-	done
-	@echo ""
-	@echo "Severity:"
-	@for spec in $(SEVERITY_SPECS); do \
-	  IFS='|' read -r n c d <<< "$$spec"; \
+	done <<-EOF
+	$(WORKFLOW_SPECS)
+	EOF
+	@echo ""; echo "Severity:"
+	@while IFS='|' read -r n c d; do \
+	  [ -z "$$n" ] && continue; \
 	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
 	  if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
 	    echo "  UPDATE  $$n"; \
@@ -364,11 +368,12 @@ setup-labels:
 	    gh api -X POST "repos/$(REPO)/labels" \
 	      -f name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
 	  fi; \
-	done
-	@echo ""
-	@echo "Priority:"
-	@for spec in $(PRIORITY_SPECS); do \
-	  IFS='|' read -r n c d <<< "$$spec"; \
+	done <<-EOF
+	$(SEVERITY_SPECS)
+	EOF
+	@echo ""; echo "Priority:"
+	@while IFS='|' read -r n c d; do \
+	  [ -z "$$n" ] && continue; \
 	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
 	  if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
 	    echo "  UPDATE  $$n"; \
@@ -379,11 +384,12 @@ setup-labels:
 	    gh api -X POST "repos/$(REPO)/labels" \
 	      -f name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
 	  fi; \
-	done
-	@echo ""
-	@echo "Complexity:"
-	@for spec in $(COMPLEXITY_SPECS); do \
-	  IFS='|' read -r n c d <<< "$$spec"; \
+	done <<-EOF
+	$(PRIORITY_SPECS)
+	EOF
+	@echo ""; echo "Complexity:"
+	@while IFS='|' read -r n c d; do \
+	  [ -z "$$n" ] && continue; \
 	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
 	  if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
 	    echo "  UPDATE  $$n"; \
@@ -394,11 +400,12 @@ setup-labels:
 	    gh api -X POST "repos/$(REPO)/labels" \
 	      -f name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
 	  fi; \
-	done
-	@echo ""
-	@echo "Confidence:"
-	@for spec in $(CONFIDENCE_SPECS); do \
-	  IFS='|' read -r n c d <<< "$$spec"; \
+	done <<-EOF
+	$(COMPLEXITY_SPECS)
+	EOF
+	@echo ""; echo "Confidence:"
+	@while IFS='|' read -r n c d; do \
+	  [ -z "$$n" ] && continue; \
 	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
 	  if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
 	    echo "  UPDATE  $$n"; \
@@ -409,11 +416,12 @@ setup-labels:
 	    gh api -X POST "repos/$(REPO)/labels" \
 	      -f name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
 	  fi; \
-	done
-	@echo ""
-	@echo "Type:"
-	@for spec in $(TYPE_SPECS); do \
-	  IFS='|' read -r n c d <<< "$$spec"; \
+	done <<-EOF
+	$(CONFIDENCE_SPECS)
+	EOF
+	@echo ""; echo "Type:"
+	@while IFS='|' read -r n c d; do \
+	  [ -z "$$n" ] && continue; \
 	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
 	  if gh api "repos/$(REPO)/labels/$$encoded" >/dev/null 2>&1; then \
 	    echo "  UPDATE  $$n"; \
@@ -424,9 +432,10 @@ setup-labels:
 	    gh api -X POST "repos/$(REPO)/labels" \
 	      -f name="$$n" -f color="$$c" -f description="$$d" >/dev/null; \
 	  fi; \
-	done
-	@echo ""
-	@echo "✅ Labels ready."
+	done <<-EOF
+	$(TYPE_SPECS)
+	EOF
+	@echo ""; echo "✅ Labels ready."
 
 ## Preview label changes without applying
 setup-labels-dry:
@@ -435,8 +444,8 @@ setup-labels-dry:
 	@echo "Dry run — label diff for: $(REPO)"
 	@echo ""
 	@echo "Workflow states:"
-	@for spec in $(WORKFLOW_SPECS); do \
-	  IFS='|' read -r n c d <<< "$$spec"; \
+	@while IFS='|' read -r n c d; do \
+	  [ -z "$$n" ] && continue; \
 	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
 	  existing=$$(gh api "repos/$(REPO)/labels/$$encoded" 2>/dev/null || echo ""); \
 	  if [ -z "$$existing" ]; then \
@@ -450,28 +459,104 @@ setup-labels-dry:
 	      echo "  OK            $$n"; \
 	    fi; \
 	  fi; \
-	done
-	@for group_name in "Severity:SEVERITY_SPECS" "Priority:PRIORITY_SPECS" \
-	                   "Complexity:COMPLEXITY_SPECS" "Confidence:CONFIDENCE_SPECS" \
-	                   "Type:TYPE_SPECS"; do \
-	  label_group=$${group_name#*:}; \
-	  group_label=$${group_name%:*}; \
-	  echo ""; echo "$$group_label:"; \
-	  eval specs="\$$($$label_group)"; \
-	  for spec in $$specs; do \
-	    IFS='|' read -r n c d <<< "$$spec"; \
-	    encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
-	    existing=$$(gh api "repos/$(REPO)/labels/$$encoded" 2>/dev/null || echo ""); \
-	    if [ -z "$$existing" ]; then echo "  WOULD CREATE  $$n"; \
+	done <<-EOF
+	$(WORKFLOW_SPECS)
+	EOF
+	@echo ""; echo "Severity:"
+	@while IFS='|' read -r n c d; do \
+	  [ -z "$$n" ] && continue; \
+	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	  existing=$$(gh api "repos/$(REPO)/labels/$$encoded" 2>/dev/null || echo ""); \
+	  if [ -z "$$existing" ]; then \
+	    echo "  WOULD CREATE  $$n"; \
+	  else \
+	    cur_color=$$(echo "$$existing" | jq -r '.color'); \
+	    cur_desc=$$(echo "$$existing"  | jq -r '.description // ""'); \
+	    if [ "$$cur_color" != "$$c" ] || [ "$$cur_desc" != "$$d" ]; then \
+	      echo "  WOULD UPDATE  $$n  (color: $$cur_color → $$c)"; \
 	    else \
-	      cur_color=$$(echo "$$existing" | jq -r '.color'); \
-	      cur_desc=$$(echo "$$existing"  | jq -r '.description // ""'); \
-	      if [ "$$cur_color" != "$$c" ] || [ "$$cur_desc" != "$$d" ]; then \
-	        echo "  WOULD UPDATE  $$n"; \
-	      else echo "  OK            $$n"; fi; \
+	      echo "  OK            $$n"; \
 	    fi; \
-	  done; \
-	done
+	  fi; \
+	done <<-EOF
+	$(SEVERITY_SPECS)
+	EOF
+	@echo ""; echo "Priority:"
+	@while IFS='|' read -r n c d; do \
+	  [ -z "$$n" ] && continue; \
+	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	  existing=$$(gh api "repos/$(REPO)/labels/$$encoded" 2>/dev/null || echo ""); \
+	  if [ -z "$$existing" ]; then \
+	    echo "  WOULD CREATE  $$n"; \
+	  else \
+	    cur_color=$$(echo "$$existing" | jq -r '.color'); \
+	    cur_desc=$$(echo "$$existing"  | jq -r '.description // ""'); \
+	    if [ "$$cur_color" != "$$c" ] || [ "$$cur_desc" != "$$d" ]; then \
+	      echo "  WOULD UPDATE  $$n  (color: $$cur_color → $$c)"; \
+	    else \
+	      echo "  OK            $$n"; \
+	    fi; \
+	  fi; \
+	done <<-EOF
+	$(PRIORITY_SPECS)
+	EOF
+	@echo ""; echo "Complexity:"
+	@while IFS='|' read -r n c d; do \
+	  [ -z "$$n" ] && continue; \
+	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	  existing=$$(gh api "repos/$(REPO)/labels/$$encoded" 2>/dev/null || echo ""); \
+	  if [ -z "$$existing" ]; then \
+	    echo "  WOULD CREATE  $$n"; \
+	  else \
+	    cur_color=$$(echo "$$existing" | jq -r '.color'); \
+	    cur_desc=$$(echo "$$existing"  | jq -r '.description // ""'); \
+	    if [ "$$cur_color" != "$$c" ] || [ "$$cur_desc" != "$$d" ]; then \
+	      echo "  WOULD UPDATE  $$n  (color: $$cur_color → $$c)"; \
+	    else \
+	      echo "  OK            $$n"; \
+	    fi; \
+	  fi; \
+	done <<-EOF
+	$(COMPLEXITY_SPECS)
+	EOF
+	@echo ""; echo "Confidence:"
+	@while IFS='|' read -r n c d; do \
+	  [ -z "$$n" ] && continue; \
+	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	  existing=$$(gh api "repos/$(REPO)/labels/$$encoded" 2>/dev/null || echo ""); \
+	  if [ -z "$$existing" ]; then \
+	    echo "  WOULD CREATE  $$n"; \
+	  else \
+	    cur_color=$$(echo "$$existing" | jq -r '.color'); \
+	    cur_desc=$$(echo "$$existing"  | jq -r '.description // ""'); \
+	    if [ "$$cur_color" != "$$c" ] || [ "$$cur_desc" != "$$d" ]; then \
+	      echo "  WOULD UPDATE  $$n  (color: $$cur_color → $$c)"; \
+	    else \
+	      echo "  OK            $$n"; \
+	    fi; \
+	  fi; \
+	done <<-EOF
+	$(CONFIDENCE_SPECS)
+	EOF
+	@echo ""; echo "Type:"
+	@while IFS='|' read -r n c d; do \
+	  [ -z "$$n" ] && continue; \
+	  encoded=$$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$$n"); \
+	  existing=$$(gh api "repos/$(REPO)/labels/$$encoded" 2>/dev/null || echo ""); \
+	  if [ -z "$$existing" ]; then \
+	    echo "  WOULD CREATE  $$n"; \
+	  else \
+	    cur_color=$$(echo "$$existing" | jq -r '.color'); \
+	    cur_desc=$$(echo "$$existing"  | jq -r '.description // ""'); \
+	    if [ "$$cur_color" != "$$c" ] || [ "$$cur_desc" != "$$d" ]; then \
+	      echo "  WOULD UPDATE  $$n  (color: $$cur_color → $$c)"; \
+	    else \
+	      echo "  OK            $$n"; \
+	    fi; \
+	  fi; \
+	done <<-EOF
+	$(TYPE_SPECS)
+	EOF
 
 ## Show all current labels in the repo
 list-labels:
