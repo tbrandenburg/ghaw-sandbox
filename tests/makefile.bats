@@ -137,3 +137,18 @@ setup() {
   [[ "$output" == *"blocked"* ]]
   [[ "$output" == *"defocus"* ]]
 }
+
+@test "Makefile.ghaw COMPLEXITY_SPECS uses size/ namespace (not complexity/)" {
+  cd "$REPO_ROOT"
+  # Verify COMPLEXITY_SPECS defines size/* labels
+  run grep -E 'size/xl|size/l|size/m|size/s|size/xs' Makefile.ghaw
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"size/xl"* ]]
+  [[ "$output" == *"size/l"* ]]
+  [[ "$output" == *"size/m"* ]]
+  [[ "$output" == *"size/s"* ]]
+  [[ "$output" == *"size/xs"* ]]
+  # Verify no complexity/ prefix is used in label specs
+  run grep "complexity/" Makefile.ghaw
+  [ "$status" -ne 0 ]
+}
