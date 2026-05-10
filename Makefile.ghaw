@@ -14,7 +14,6 @@
 ##   • Size:     xl, l, m, s, xs   (SAFe Fibonacci — WSJF job size denominator)
 ##   • Confidence: certain, high, medium, low, none
 ##   • Type:    bug, feature, arch, feedback, chore, docs, refactor
-##   • Type:    bug, feature, arch, feedback, chore, docs, refactor
 ##
 ## USAGE:
 ##   make -f Makefile.ghaw install           # Install files (skip existing)
