@@ -89,11 +89,11 @@ Set all four labels:
     gh issue edit $ARGUMENTS \
       --add-label "severity/{val}" \
       --add-label "priority/{val}" \
-      --add-label "complexity/{val}" \
+      --add-label "size/{val}" \
       --add-label "confidence/{val}"
 
 Label value mappings:
 - severity:   critical, high, medium, low
 - priority:   high, medium, low
-- complexity: high, medium, low
+- size:       xl, l, m, s, xs
 - confidence: high, medium, low

@@ -33,7 +33,7 @@ If hard blocker detected:
        gh issue create \
          --title "{reformulated title}" \
          --body "Replaces #${number} which was blocked by: {reason}\n\n## Alternative Approach\n\n{description of approach that avoids the constraint}\n\n## Acceptance Criteria\n\n{criteria}" \
-         --label "type/{type},priority/{val},severity/{val},complexity/{val},confidence/{val},open"
+         --label "type/{type},priority/{val},severity/{val},size/{val},confidence/{val},open"
        gh issue comment {number} --body "♻️ Replaced by #{new-number}"
 
 ### Soft Blocker
@@ -100,14 +100,14 @@ If architectural conflict or missing dependency found:
 
 ### Step 5: Story Splitting
 
-If the issue scope is too large for a single sprint (complexity/high and multiple independent concerns):
+If the issue scope is too large for a single sprint (size/xl or size/l and multiple independent concerns):
 
 Create sub-issues:
 
     gh issue create \
       --title "{sub-issue title}" \
       --body "Parent: #{number}\n\n{description}" \
-      --label "severity/{val},priority/{val},complexity/{val},confidence/{val}"
+      --label "severity/{val},priority/{val},size/{val},confidence/{val}"
 
 Add summary to parent:
 
@@ -123,10 +123,10 @@ If severity or priority labels are incorrect based on current understanding:
 
 ### Step 7: PO Handoff (if needed)
 
-After completing all grooming checks, if the issue was NOT defocused and NOT flagged with unresolved questions, and has `confidence/low` OR `complexity/high`:
+After completing all grooming checks, if the issue was NOT defocused and NOT flagged with unresolved questions, and has `confidence/low` OR `size/xl` or `size/l`:
 
     gh issue comment {number} \
-      --body "✅ Grooming complete. Confidence or complexity requires PO review before sprint planning.
+      --body "✅ Grooming complete. Confidence or size requires PO review before sprint planning.
 
       @{{ github.repository_owner }} — please review and add the \`ready\` label when satisfied."
 

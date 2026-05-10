@@ -15,8 +15,8 @@ Focus on:
 For sprint planning:
 - Evaluate blocked issues to see if blockers are resolved
 - Only consider issues labelled `ready` as candidates for sprint assignment
-- Apply WSJF scoring: (severity + priority) / complexity using SAFe Fibonacci (1,2,3,5,8,13,20)
-- Assign top N issues up to MAX_WIP limit: add `in-progress`, remove `ready`
+- Apply WSJF scoring: (severity + priority) / size using SAFe Fibonacci size values (xl=13, l=8, m=5, s=3, xs=1)
+- Assign top N issues up to MAX_WIP limit: add `in-progress`, remove `planned`
 
 Do not implement anything. Plan and assign only.
 Act directly via gh CLI — no structured return value needed.

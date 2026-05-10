@@ -13,7 +13,7 @@ Read the full input. For each approved PR extract:
 
 - PR number, title, linked issue
 - Files changed (from diff context)
-- Issue labels: severity, priority, complexity
+- Issue labels: severity, priority, size
 - `mergeStateStatus`: CLEAN, BEHIND, DIRTY, BLOCKED, UNKNOWN
 
 Build a mental model of the full candidate set before making any decisions.

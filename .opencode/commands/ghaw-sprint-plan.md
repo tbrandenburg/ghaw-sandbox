@@ -34,14 +34,14 @@ For PRs in the input with reviewDecision=CHANGES_REQUESTED:
 For each planned issue, score using Fibonacci values from labels:
 - severity_map:  critical=13, high=8, medium=5, low=3
 - priority_map:  high=8, medium=5, low=3
-- complexity_map: high=8, medium=5, low=3
+- size_map:      xl=13, l=8, m=5, s=3, xs=1
 
-    WSJF = (severity + priority) / complexity
+    WSJF = (severity + priority) / size
 
 Post score comment:
 
     gh issue comment {number} \
-      --body "📊 WSJF: {score} (CoD: {severity}+{priority} / Size: {complexity})"
+      --body "📊 WSJF: {score} (CoD: {severity}+{priority} / Size: {size})"
 
 ## Step 4: Assign Sprint
 

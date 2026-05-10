@@ -80,7 +80,7 @@ jobs:
           COUNT=$(echo "$ISSUES_JSON" | jq length)
           echo "✅ Groomed $COUNT issues" >> $GITHUB_STEP_SUMMARY
 
-          # Auto-promote to ready if confidence != low AND complexity != high
+          # Auto-promote to ready if confidence != low AND size != xl/l
           # Only for issues that are still open (not defocused) after grooming
           for NUMBER in $(echo "$ISSUES_JSON" | jq -r '.[].number'); do
             LABELS=$(gh api repos/${{ github.repository }}/issues/$NUMBER \
@@ -97,7 +97,7 @@ jobs:
             [ "$IS_BLOCKED" = "true" ] && continue
 
             HAS_LOW_CONF=$(echo "$LABELS" | jq 'contains(["confidence/low"])')
-            HAS_HIGH_COMP=$(echo "$LABELS" | jq 'contains(["complexity/xl"]) or contains(["complexity/l"])')
+            HAS_HIGH_COMP=$(echo "$LABELS" | jq 'contains(["size/xl"]) or contains(["size/l"])')
 
             if [ "$HAS_LOW_CONF" = "false" ] && [ "$HAS_HIGH_COMP" = "false" ]; then
               gh issue edit $NUMBER \
@@ -109,6 +109,6 @@ jobs:
                 --remove-label "defocus"
               echo "✅ #$NUMBER → ready (auto-promoted)" >> $GITHUB_STEP_SUMMARY
             else
-              echo "⏳ #$NUMBER → PO handoff required (confidence/low or complexity/xl or complexity/l)" >> $GITHUB_STEP_SUMMARY
+              echo "⏳ #$NUMBER → PO handoff required (confidence/low or size/xl or size/l)" >> $GITHUB_STEP_SUMMARY
             fi
           done

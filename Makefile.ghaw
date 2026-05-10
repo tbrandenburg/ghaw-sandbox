@@ -11,7 +11,7 @@
 ##   • Workflow: open, ready, planned, in-progress, reviewed, blocked, defocus
 ##   • Severity: critical, high, medium, low
 ##   • Priority: high, medium, low
-##   • Complexity: xl, l, m, s, xs   (SAFe Fibonacci)
+##   • Size:     xl, l, m, s, xs   (SAFe Fibonacci — WSJF job size denominator)
 ##   • Confidence: certain, high, medium, low, none
 ##   • Type:    bug, feature, arch, feedback, chore, docs, refactor
 ##   • Type:    bug, feature, arch, feedback, chore, docs, refactor
@@ -153,11 +153,11 @@ endef
 
 # --- Complexity (SAFe Fibonacci job size) ---
 define COMPLEXITY_SPECS
-complexity/xl|$(DARK_RED)|XL complexity — SAFe Fibonacci 13
-complexity/l|$(RED)|L complexity — SAFe Fibonacci 8
-complexity/m|$(YELLOW)|M complexity — SAFe Fibonacci 5
-complexity/s|$(GREEN)|S complexity — SAFe Fibonacci 3
-complexity/xs|$(DARK_GREEN)|XS complexity — SAFe Fibonacci 1
+size/xl|$(DARK_RED)|XL size — SAFe Fibonacci 13
+size/l|$(RED)|L size — SAFe Fibonacci 8
+size/m|$(YELLOW)|M size — SAFe Fibonacci 5
+size/s|$(GREEN)|S size — SAFe Fibonacci 3
+size/xs|$(DARK_GREEN)|XS size — SAFe Fibonacci 1
 endef
 
 # --- Confidence (certainty about approach) ---

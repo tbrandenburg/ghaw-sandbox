@@ -76,7 +76,7 @@ This separation keeps label transitions reliable and auditable.
 ## Label Taxonomy
 
 Follow the `key/value` namespace pattern. See README.md#label-taxonomy for the full table.
-Key namespaces: `severity/`, `priority/`, `complexity/`, `confidence/`, `type/`
+Key namespaces: `severity/`, `priority/`, `size/`, `confidence/`, `type/`
 
 State labels (no namespace prefix): `open`, `ready`, `in-progress`, `reviewed`, `blocked`, `defocus`
 

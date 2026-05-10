@@ -110,7 +110,7 @@ State labels are **mutually exclusive**. An issue carries exactly one state labe
 ```mermaid
 stateDiagram-v2
     [*] --> open : Issue opened
-    open --> ready : Groomer passes all checks\n(confidence ≠ low, complexity ≠ high)
+    open --> ready : Groomer passes all checks\n(confidence ≠ low, size ≠ xl/l)
     ready --> planned : Planner creates implementation plan
     ready --> blocked : Planner cannot plan\n(issue unclear)
     planned --> in-progress : Sprint Planner: WSJF top-N\nwithin WIP limit
@@ -220,7 +220,7 @@ All labels follow the `key/value` namespace pattern to avoid conflicts:
 | *(state)* | `open`, `ready`, `in-progress`, `reviewed`, `blocked`, `defocus` | **Mutually exclusive state machine** |
 | `severity/` | `critical`, `high`, `medium`, `low`, `trivial` | WSJF scoring input |
 | `priority/` | `critical`, `high`, `medium`, `low`, `trivial` | WSJF scoring input |
-| `complexity/` | `xl`, `l`, `m`, `s`, `xs` | WSJF scoring input |
+| `size/` | `xl`, `l`, `m`, `s`, `xs` | WSJF job size denominator (SAFe Fibonacci: xl=13, l=8, m=5, s=3, xs=1) |
 | `confidence/` | `certain`, `high`, `medium`, `low`, `none` | Groomer gate — `confidence/low` blocks auto-promotion to `ready` |
 | `type/` | `bug`, `feature`, `arch`, `coordination`, `feedback`, `chore`, `docs`, `refactor` | Classification |
 
