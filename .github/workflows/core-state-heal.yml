@@ -4,7 +4,7 @@ name: GHAW - Issue State Healer
 # If the label is a state label and the issue now carries more than one
 # state label, heals it by keeping the one just added and removing the rest.
 #
-# State labels (mutually exclusive): open, ready, in-progress, reviewed, blocked, defocus
+# State labels (mutually exclusive): open, ready, planned, in-progress, reviewed, blocked, defocus
 
 on:
   issues:
@@ -14,7 +14,7 @@ jobs:
   heal:
     # Only run if the added label is a state label
     if: |
-      contains(fromJSON('["open","ready","in-progress","reviewed","blocked","defocus"]'),
+      contains(fromJSON('["open","ready","planned","in-progress","reviewed","blocked","defocus"]'),
                github.event.label.name)
     runs-on: ubuntu-latest
     env:
@@ -24,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          STATE_LABELS="open ready in-progress reviewed blocked defocus"
+          STATE_LABELS="open ready planned in-progress reviewed blocked defocus"
           REPO="${{ github.repository }}"
           NUMBER="${{ github.event.issue.number }}"
           ADDED="${{ github.event.label.name }}"
@@ -35,7 +35,7 @@ jobs:
 
           # Count state labels currently set
           STATE_COUNT=$(echo "$CURRENT" | jq \
-            --argjson states '["open","ready","in-progress","reviewed","blocked","defocus"]' \
+            --argjson states '["open","ready","planned","in-progress","reviewed","blocked","defocus"]' \
             '[.[] | select(. as $l | $states | index($l) != null)] | length')
 
           if [ "$STATE_COUNT" -le "1" ]; then

@@ -108,56 +108,39 @@ A dedicated background workflow (`core-state-heal.yml`) enforces the mutual-excl
 State labels are **mutually exclusive**. An issue carries exactly one state label at any time. The `core-state-heal.yml` workflow enforces this on every label-add event.
 
 ```mermaid
-flowchart TD
-    START(( )) -->|"issues:opened / Planner verify"| OPEN
-
-    OPEN([open])
-    READY([ready])
-    WIP([in-progress])
-    REVIEWED([reviewed])
-    BLOCKED([blocked])
-    DEFOCUS([defocus])
-    CLOSED(( ))
-
-    OPEN -->|"BGA: confidence≠low ∧ complexity≠xl/l\n+ plan exists"| READY
-    OPEN -->|"BGA: timeout 3d / out-of-scope\nor hard blocker"| DEFOCUS
-
-    READY -->|"SPA gate: plan missing → demote"| OPEN
-    READY -->|"SPA: WSJF top-N, WIP slot free"| WIP
-
-    WIP -->|"Review: ✅ Technical review passed + CI green"| REVIEWED
-    WIP -->|"Dev Agent: blocker found"| BLOCKED
-
-    REVIEWED -->|"Integrator: PO approved + CI green"| CLOSED
-    REVIEWED -.->|"Escape hatch: PR closed without merge"| OPEN
-    REVIEWED -.->|"SPA: CHANGES_REQUESTED + new commits"| WIP
-    REVIEWED -->|"Integrator: merge deferred\n← DEFERRED → marker"| BLOCKED
-
-    BLOCKED -->|"SPA: blocker resolved"| READY
-    BLOCKED -->|"BGA: hard blocker confirmed"| DEFOCUS
-
-    DEFOCUS --> TERMINAL(( ))
-    CLOSED --> TERMINAL
+stateDiagram-v2
+    [*] --> open : Issue opened
+    open --> ready : Groomer passes all checks\n(confidence ≠ low, complexity ≠ high)
+    ready --> planned : Planner creates implementation plan
+    ready --> blocked : Planner cannot plan\n(issue unclear)
+    planned --> in-progress : Sprint Planner: WSJF top-N\nwithin WIP limit
+    in-progress --> reviewed : Review Agent:\n✅ Technical review passed
+    in-progress --> blocked : Dev Agent: blocker found\nIntegrator: merge deferred
+    reviewed --> blocked : Integrator: merge deferred\n(conflict detected)
+    blocked --> planned : Sprint Planner:\nblocker resolved
+    reviewed --> [*] : Integrator merges PR\n(GitHub closes issue)
+    open --> defocus : Groomer: out of scope\nor hard blocker
+    ready --> defocus : Groomer: out of scope
+    in-progress --> defocus : Groomer: out of scope
+    blocked --> defocus : Groomer: hard blocker
 ```
 
 ### State Transition Table
 
 | Input State | Agent / Workflow | Output State | Output Artefact |
 | --- | --- | --- | --- |
-| *(new issue)* | **Planner** | `open` | `<!-- PLAN -->` comment; `open` label set |
 | `open` | **Groomer** | `ready` | Labels updated; `ready` set, `open` removed |
-| `open` | **Groomer** | `defocus` | Issue closed (`not planned`); `defocus` set |
-| `ready` | **Sprint Planner** (gate) | `open` | Issue demoted — no plan found |
-| `ready` | **Sprint Planner** | `in-progress` | `in-progress` set, `ready` removed |
+| `open` | **Groomer** | `defocus` | Labels updated; issue closed |
+| `ready` | **Planner** | `planned` | `<!-- PLAN -->` comment; `planned` set, `ready` removed |
+| `ready` | **Planner** (cannot plan) | `blocked` | `<!-- CANNOT-PLAN -->` comment; `blocked` set, `ready` removed |
+| `planned` | **Sprint Planner** | `in-progress` | `in-progress` set, `planned` removed |
 | `in-progress` | **Dev** | PR opened | Branch, commits, pull request (`Closes #N`) |
 | `in-progress` | **Dev** (blocker) | `blocked` | `blocked` set, `in-progress` removed; comment |
 | `in-progress` | **Review** | `reviewed` | `reviewed` set, `in-progress` removed |
 | `reviewed` | **Integrator** | *(closed)* | Merge commit on `main`; `reviewed` removed |
-| `reviewed` | **Integrator** (deferred) | `blocked` | `blocked` set, `reviewed` removed; `<!-- DEFERRED -->` marker in PR comment |
-| `reviewed` | **Integrator** (escape hatch) | `open` | PR closed without merge; `reviewed` removed, `open` set |
-| `blocked` | **Sprint Planner** | `ready` | `blocked` removed, `ready` restored |
-| `blocked` | **Groomer** (hard blocker) | `defocus` | Issue closed; replacement issue created |
-| any | **State Healer** | last-set state | Conflicting state labels removed instantly |
+| `reviewed` | **Integrator** (deferred) | `blocked` | `blocked` set, `reviewed` removed; `⏸️ Merge deferred` comment |
+| `blocked` | **Sprint Planner** | `planned` | `blocked` removed, `planned` restored |
+| any | **State Healer** | last-set state | Conflicting state labels removed |
 
 ---
 
@@ -167,9 +150,9 @@ GHAW includes eight specialised AI agents, each responsible for a distinct phase
 
 | Agent | Trigger | Schedule | What It Does |
 | --- | --- | --- | --- |
-| **Planner** | `issues: opened`, schedule, `workflow_dispatch` | Every 6h at :00 | Analyses issues, creates `<!-- PLAN -->` implementation plans, sets `open` label |
+| **Planner** | `issues: labeled` (ready), schedule, `workflow_dispatch` | Every 6h at :00 | Analyses `ready` issues, creates `<!-- PLAN -->` implementation plans, promotes to `planned` or `blocked` |
 | **Groomer** | Schedule, `issues: unlabeled` (on `confidence/low` removal) | Every 6h at :00 | Reviews `open` issues for clarity, feasibility, scope — promotes to `ready` or marks `defocus` |
-| **Sprint Planner** | Schedule, `workflow_dispatch` | Every 6h at :01 | WSJF-ranks `ready` issues, assigns top-N to `in-progress` within `MAX_WIP` limit |
+| **Sprint Planner** | Schedule, `workflow_dispatch` | Every 6h at :01 | WSJF-ranks `planned` issues, assigns top-N to `in-progress` within `MAX_WIP` limit |
 | **Dev** | Schedule, `workflow_dispatch` | Every hour | Implements `in-progress` issues — creates branch, writes code, opens PR with `Closes #N` |
 | **CI/CD** | Schedule, `workflow_dispatch` | Every hour | Detects failing CI on open PRs, diagnoses root cause, pushes fix commits |
 | **Review** | Schedule, `workflow_dispatch` | Every hour | Reviews PRs against Definition of Done — posts `✅ Technical review passed` or `❌ Changes required` |
@@ -222,7 +205,7 @@ GHAW includes eight specialised AI agents, each responsible for a distinct phase
 
 ### Key Design Principles
 
-- **Agents signal via comments, workflows apply labels.** Commands explicitly instruct agents not to set state labels directly — the verify step detects structured signals (`✅ Technical review passed`, `<!-- DEFERRED -->`) and applies labels deterministically.
+- **Agents signal via comments, workflows apply labels.** Commands explicitly instruct agents not to set state labels directly — the verify step detects signals (`✅ Technical review passed`, `⏸️ Merge deferred`) and applies labels deterministically.
 - **State healer runs independently.** No agent workflow calls the healer — it fires reactively on every `issues: labeled` event, keeping state consistent without coupling.
 - **Guards before, verification after.** Prep steps filter out issues in wrong states before the agent runs. Verify steps confirm expected outcomes after.
 

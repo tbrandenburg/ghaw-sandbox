@@ -8,12 +8,12 @@
 ##   Bootstrapping is fully idempotent — safe to run multiple times.
 ##
 ## LABEL SYSTEMS (delegated to Makefile.ghprj patterns):
-##   • Workflow: open, ready, in-progress, reviewed, closed, released
+##   • Workflow: open, ready, planned, in-progress, reviewed, blocked, defocus
 ##   • Severity: critical, high, medium, low
 ##   • Priority: high, medium, low
 ##   • Complexity: xl, l, m, s, xs   (SAFe Fibonacci)
 ##   • Confidence: certain, high, medium, low, none
-##   • Status:  ready, in-progress, reviewed, blocked, defocus
+##   • Type:    bug, feature, arch, feedback, chore, docs, refactor
 ##   • Type:    bug, feature, arch, feedback, chore, docs, refactor
 ##
 ## USAGE:
@@ -125,7 +125,8 @@ CYAN        := 00FFFF
 # --- Workflow states ---
 define WORKFLOW_SPECS
 open|$(LIGHT_BLUE)|New or unrefined work. Collaborative grooming allowed.
-ready|$(GREEN)|Definition of Ready met. Pullable by dev team (PO gate).
+ready|$(GREEN)|Groomed and clear. Awaiting implementation plan from Planner.
+planned|$(DARK_GREEN)|Implementation plan created. Ready for sprint assignment.
 in-progress|$(YELLOW)|Work pulled by team; implementation underway.
 reviewed|$(BLUE)|PR approved + CI green. Awaiting PO merge approval.
 blocked|$(RED)|Work is blocked by an external dependency or issue.

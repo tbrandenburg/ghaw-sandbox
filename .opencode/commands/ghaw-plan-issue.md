@@ -44,6 +44,17 @@ If NO-ACTION applies:
 
 Then stop — do not proceed to Step 4 or 5.
 
+## Step 3b: CANNOT-PLAN Check
+
+If the issue description is too unclear to produce a concrete plan (missing acceptance criteria,
+contradictory requirements, or unresolved ambiguities that block implementation), post:
+
+    gh issue comment $ARGUMENTS --body "<!-- CANNOT-PLAN -->
+    Cannot create implementation plan. Reason: {specific explanation of what is unclear or missing}"
+
+Then stop — do not proceed to Step 4 or 5. The verify step will set the issue to `blocked`
+so a human can clarify before re-grooming.
+
 ## Step 4: Draft Implementation Plan
 
 Structure the plan as:

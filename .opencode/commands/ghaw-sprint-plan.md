@@ -1,11 +1,11 @@
 ---
-description: WSJF ranking and sprint assignment for ready issues
+description: WSJF ranking and sprint assignment for planned issues
 argument-hint: <sprint-context-json>
 ---
 
 # Sprint Planning
 
-**Input**: $ARGUMENTS (JSON with ready issues, blocked issues, open PRs, MAX_WIP, CURRENT_WIP)
+**Input**: $ARGUMENTS (JSON with planned issues, blocked issues, open PRs, MAX_WIP, CURRENT_WIP)
 
 ## Step 1: Handle Blocked Issues
 
@@ -13,8 +13,8 @@ For each blocked issue:
 - Read blocker comments to determine if the blocking condition is resolved
 - If resolved:
 
-      gh issue edit {number} --add-label "ready" --remove-label "blocked"
-      gh issue comment {number} --body "✅ Blocker resolved — returning to ready state."
+      gh issue edit {number} --add-label "planned" --remove-label "blocked"
+      gh issue comment {number} --body "✅ Blocker resolved — returning to planned state."
 
 - If still blocked: leave as-is, note it in step summary
 
@@ -31,9 +31,7 @@ For PRs in the input with reviewDecision=CHANGES_REQUESTED:
 
 ## Step 3: WSJF Scoring
 
-For each ready issue with a confirmed <!-- PLAN --> comment:
-
-Score using Fibonacci values from labels:
+For each planned issue, score using Fibonacci values from labels:
 - severity_map:  critical=13, high=8, medium=5, low=3
 - priority_map:  high=8, medium=5, low=3
 - complexity_map: high=8, medium=5, low=3

@@ -45,18 +45,18 @@ Since handling issues autonomously is already complex enough, every design decis
 
 ## State Machine — Critical Rules
 
-State labels (`open`, `ready`, `in-progress`, `reviewed`, `blocked`, `defocus`) are **mutually exclusive**.
+State labels (`open`, `ready`, `planned`, `in-progress`, `reviewed`, `blocked`, `defocus`) are **mutually exclusive**.
 `core-state-heal.yml` fires on every `issues: labeled` event and removes any conflicting state labels automatically.
 
 ### What each agent MUST and MUST NOT do with state labels
 
 | Agent | MUST add | MUST remove | MUST NOT touch labels |
 | --- | --- | --- | --- |
-| Planner (verify step) | `open` | `ready`, `in-progress`, `blocked`, `defocus`, `reviewed` | — |
+| Planner (verify step, success) | `planned` | `ready` | — |
+| Planner (verify step, failure) | `blocked` | `ready` | — |
 | Groomer → ready | `ready` | `open`, `blocked`, `in-progress`, `defocus` | — |
 | Groomer → defocus | `defocus` | `open`, `ready`, `in-progress`, `blocked` | — |
-| Sprint Planner (gate) | `open` | `ready` | — |
-| Sprint Planner (assign) | `in-progress` | `ready`, `open`, `blocked`, `reviewed` | — |
+| Sprint Planner (assign) | `in-progress` | `planned`, `open`, `blocked`, `reviewed` | — |
 | Dev → blocked | `blocked` | `in-progress` | — |
 | Review (verify step) | `reviewed` | `in-progress`, `ready`, `open`, `blocked` | — |
 | Integrator (post-merge) | *(none)* | `reviewed` | — |

@@ -25,12 +25,12 @@ jobs:
       - name: Fetch candidates and WIP state
         id: fetch
         run: |
-          READY=$(gh issue list \
+          PLANNED=$(gh issue list \
             --repo ${{ github.repository }} \
-            --label ready \
+            --label planned \
             --json number,title,labels,comments)
           # Exclude issues also carrying reviewed — they have a PR awaiting merge
-          READY=$(echo "$READY" | jq '[.[] | select(
+          PLANNED=$(echo "$PLANNED" | jq '[.[] | select(
             ([.labels[].name] | contains(["reviewed"])) | not
           )]')
           BLOCKED=$(gh issue list \
@@ -47,7 +47,7 @@ jobs:
             --label in-progress \
             --json number | jq length)
 
-          TOTAL=$(echo "$READY$BLOCKED" | jq -s 'add | length')
+          TOTAL=$(echo "$PLANNED$BLOCKED" | jq -s 'add | length')
           if [ "$TOTAL" = "0" ] && [ "$CURRENT_WIP" -ge "$MAX_WIP" ]; then
             echo "has_candidates=false" >> $GITHUB_OUTPUT
           else
@@ -55,8 +55,8 @@ jobs:
           fi
 
           {
-            echo 'READY_JSON<<EOF'
-            echo "$READY"
+            echo 'PLANNED_JSON<<EOF'
+            echo "$PLANNED"
             echo 'EOF'
           } >> $GITHUB_ENV
           {
@@ -80,34 +80,12 @@ jobs:
         id: build
         run: |
           PROMPT="Repo owner: @${{ github.repository_owner }}
-          Ready issues: $READY_JSON
+          Planned issues: $PLANNED_JSON
           Blocked issues: $BLOCKED_JSON
           Open PRs: $OPEN_PRS_JSON
           MAX_WIP: $MAX_WIP
           CURRENT_WIP: $CURRENT_WIP"
           echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
-
-      # Gate: remove ready issues without <!-- PLAN --> from candidates
-      - name: Filter unplanned issues
-        run: |
-          for NUMBER in $(echo "$READY_JSON" | jq -r '.[].number'); do
-            HAS_PLAN=$(gh issue view $NUMBER \
-              --repo ${{ github.repository }} \
-              --json comments \
-              --jq '[.comments[].body | contains("<!-- PLAN -->")] | any')
-            if [ "$HAS_PLAN" != "true" ]; then
-              echo "⏭️ #$NUMBER skipped — no implementation plan. Planner Agent will create one." >> $GITHUB_STEP_SUMMARY
-              # Comment first so the state is recoverable if the workflow crashes before the label edit
-              gh issue comment $NUMBER \
-                --repo ${{ github.repository }} \
-                --body "⏭️ Sprint Planning skipped: missing implementation plan. Planner Agent will create one."
-              # Remove from candidates by removing ready label so sprint planner ignores it
-              gh issue edit $NUMBER \
-                --repo ${{ github.repository }} \
-                --remove-label "ready" \
-                --add-label "open"
-            fi
-          done
 
   run-sprint-planner:
     needs: prepare
@@ -152,14 +130,14 @@ jobs:
           echo "WIP slots available: $SLOTS" >> $GITHUB_STEP_SUMMARY
           [ "$SLOTS" -le "0" ] && echo "WIP limit reached — no assignments." >> $GITHUB_STEP_SUMMARY && exit 0
 
-          # Collect ready issues and their WSJF scores from comments
-          READY=$(gh issue list \
+          # Collect planned issues and their WSJF scores from comments
+          PLANNED=$(gh issue list \
             --repo ${{ github.repository }} \
-            --label ready \
+            --label planned \
             --json number,comments)
 
           # Extract WSJF score from "📊 WSJF: {score}" comment, default 0
-          SCORED=$(echo "$READY" | jq '[.[] | {
+          SCORED=$(echo "$PLANNED" | jq '[.[] | {
             number: .number,
             wsjf: (
               [.comments[].body | capture("WSJF: (?<s>[0-9.]+)").s // "0"] | last | tonumber
@@ -179,7 +157,7 @@ jobs:
             gh issue edit $NUMBER \
               --repo ${{ github.repository }} \
               --add-label "in-progress" \
-              --remove-label "ready" \
+              --remove-label "planned" \
               --remove-label "open" \
               --remove-label "blocked"
             echo "✅ #$NUMBER → in-progress" >> $GITHUB_STEP_SUMMARY
