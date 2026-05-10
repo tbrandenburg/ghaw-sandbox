@@ -11,6 +11,7 @@ jobs:
     outputs:
       has_activity: ${{ steps.fetch.outputs.has_activity }}
       prompt:       ${{ steps.build.outputs.prompt }}
+      model:        ${{ steps.config.outputs.model }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -24,6 +25,10 @@ jobs:
         run: |
           wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
 
       - name: Fetch today's closed issues
         id: fetch
@@ -48,28 +53,16 @@ jobs:
             echo 'EOF'
           } >> $GITHUB_ENV
 
-      - name: Run E2E tests (optional)
-        if: steps.fetch.outputs.has_activity == 'true'
-        run: |
-          E2E_CMD=$(yq '.e2e_command' .github/config/config.yml)
-          if [ -n "$E2E_CMD" ] && [ "$E2E_CMD" != "null" ]; then
-            $E2E_CMD > e2e_results.txt 2>&1 || true
-          else
-            echo "(no e2e_command configured — Demo Agent will reason about feature state)" > e2e_results.txt
-          fi
-
       - name: Build prompt
         id: build
         if: steps.fetch.outputs.has_activity == 'true'
         run: |
           SHA=$(git rev-parse HEAD)
-          E2E=$(cat e2e_results.txt 2>/dev/null || echo "")
           PROMPT="Sprint closed issues: $CLOSED
-          Main branch SHA: $SHA
-          E2E results: $E2E"
+          Main branch SHA: $SHA"
           echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
 
-  run-demo:
+  run:
     needs: prepare
     if: needs.prepare.outputs.has_activity == 'true'
     uses: ./.github/workflows/core-opencode-run.yml
@@ -78,27 +71,20 @@ jobs:
       command:  ghaw-demo
       prompt:   ${{ needs.prepare.outputs.prompt }}
       agent:    demo
-      model:    opencode/big-pickle
+      model:    ${{ needs.prepare.outputs.model }}
       timeout-minutes: 60
     permissions:
       issues:   write
       contents: read
     secrets: inherit
 
-  upload-artifacts:
-    needs: [prepare, run-demo]
+  verify:
+    needs: [prepare, run]
     if: needs.prepare.outputs.has_activity == 'true'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Upload E2E results
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-results-${{ github.run_id }}
-          path: e2e_results.txt
-          if-no-files-found: ignore
-
       - name: Summary
         run: |
           TODAY=$(date -u +"%Y-%m-%dT00:00:00Z")

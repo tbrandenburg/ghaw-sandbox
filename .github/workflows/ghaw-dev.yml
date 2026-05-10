@@ -11,9 +11,22 @@ jobs:
     outputs:
       has_candidates: ${{ steps.filter.outputs.has_candidates }}
       prompt:         ${{ steps.build.outputs.prompt }}
+      model:          ${{ steps.config.outputs.model }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
+
       - name: Fetch in-progress issues and open PRs
         id: filter
         run: |
@@ -91,7 +104,7 @@ jobs:
           Open PRs: $OPEN_PRS"
           echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
 
-  run-dev:
+  run:
     needs: prepare
     if: needs.prepare.outputs.has_candidates == 'true'
     uses: ./.github/workflows/core-opencode-run.yml
@@ -100,7 +113,7 @@ jobs:
       command:  ghaw-dev-issue
       prompt:   ${{ needs.prepare.outputs.prompt }}
       agent:    dev
-      model:    opencode/big-pickle
+      model:    ${{ needs.prepare.outputs.model }}
       timeout-minutes: 60
     permissions:
       issues:        write
@@ -109,7 +122,7 @@ jobs:
     secrets: inherit
 
   verify:
-    needs: [prepare, run-dev]
+    needs: [prepare, run]
     if: needs.prepare.outputs.has_candidates == 'true'
     runs-on: ubuntu-latest
     env:

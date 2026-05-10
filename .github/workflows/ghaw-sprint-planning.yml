@@ -11,6 +11,7 @@ jobs:
     outputs:
       has_candidates: ${{ steps.fetch.outputs.has_candidates }}
       prompt:         ${{ steps.build.outputs.prompt }}
+      model:          ${{ steps.config.outputs.model }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -21,6 +22,10 @@ jobs:
         run: |
           wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
 
       - name: Fetch candidates and WIP state
         id: fetch
@@ -87,7 +92,7 @@ jobs:
           CURRENT_WIP: $CURRENT_WIP"
           echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
 
-  run-sprint-planner:
+  run:
     needs: prepare
     if: needs.prepare.outputs.has_candidates == 'true'
     uses: ./.github/workflows/core-opencode-run.yml
@@ -96,7 +101,7 @@ jobs:
       command:  ghaw-sprint-plan
       prompt:   ${{ needs.prepare.outputs.prompt }}
       agent:    planner
-      model:    opencode/big-pickle
+      model:    ${{ needs.prepare.outputs.model }}
       timeout-minutes: 30
     permissions:
       issues:        write
@@ -104,8 +109,8 @@ jobs:
       contents:      read
     secrets: inherit
 
-  summary:
-    needs: [prepare, run-sprint-planner]
+  verify:
+    needs: [prepare, run]
     if: needs.prepare.outputs.has_candidates == 'true'
     runs-on: ubuntu-latest
     env:

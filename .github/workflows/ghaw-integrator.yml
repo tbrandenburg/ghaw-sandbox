@@ -11,6 +11,7 @@ jobs:
     outputs:
       has_candidates: ${{ steps.collect.outputs.has_candidates }}
       prompt:         ${{ steps.build.outputs.prompt }}
+      model:          ${{ steps.config.outputs.model }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -19,6 +20,15 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
 
       - name: Collect merge candidates and context
         id: collect
@@ -140,7 +150,7 @@ jobs:
 
           echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
 
-  run-integrate:
+  run:
     needs: prepare
     if: needs.prepare.outputs.has_candidates == 'true'
     uses: ./.github/workflows/core-opencode-run.yml
@@ -149,7 +159,7 @@ jobs:
       command:  ghaw-integrate
       prompt:   ${{ needs.prepare.outputs.prompt }}
       agent:    integrator
-      model:    opencode/big-pickle
+      model:    ${{ needs.prepare.outputs.model }}
       timeout-minutes: 60
     permissions:
       issues:        write
@@ -158,7 +168,7 @@ jobs:
     secrets: inherit
 
   verify:
-    needs: [prepare, run-integrate]
+    needs: [prepare, run]
     if: needs.prepare.outputs.has_candidates == 'true'
     runs-on: ubuntu-latest
     env:

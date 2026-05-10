@@ -1,3 +1,2 @@
 max_wip: 3
 model: opencode/big-pickle
-e2e_command: ""                  # Optional — empty = skip script, Demo Agent reasons instead

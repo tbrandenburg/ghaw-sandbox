@@ -14,9 +14,22 @@ jobs:
       has_issues: ${{ steps.fetch.outputs.has_issues }}
       issues_json: ${{ steps.fetch.outputs.issues_json }}
       repo_owner: ${{ steps.fetch.outputs.repo_owner }}
+      model:       ${{ steps.config.outputs.model }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
+
       - name: Fetch open issues
         id: fetch
         run: |
@@ -50,7 +63,7 @@ jobs:
             echo "repo_owner=${{ github.repository_owner }}" >> $GITHUB_OUTPUT
           fi
 
-  run-groomer:
+  run:
     needs: prepare
     if: needs.prepare.outputs.has_issues == 'true'
     uses: ./.github/workflows/core-opencode-run.yml
@@ -59,15 +72,15 @@ jobs:
       command:  ghaw-groom-issue
       prompt:   "Repo owner: @${{ needs.prepare.outputs.repo_owner }}\nIssues: ${{ needs.prepare.outputs.issues_json }}"
       agent:    groomer
-      model:    opencode/big-pickle
+      model:    ${{ needs.prepare.outputs.model }}
       timeout-minutes: 50
     permissions:
       issues:   write
       contents: read
     secrets: inherit
 
-  summary:
-    needs: [prepare, run-groomer]
+  verify:
+    needs: [prepare, run]
     if: needs.prepare.outputs.has_issues == 'true'
     runs-on: ubuntu-latest
     env:

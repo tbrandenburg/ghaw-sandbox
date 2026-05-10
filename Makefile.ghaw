@@ -262,11 +262,11 @@ install:
 	@echo "Configuring git hooks..."
 	@git config core.hooksPath .githooks
 	@echo ""
+	@$(MAKE) -f Makefile.ghaw setup-labels
+	@echo ""
 	@echo "✅ Files installed. Next steps:"
-	@echo "   1. make -f Makefile.ghaw setup-labels"
-	@echo "   2. Edit .github/config/config.yml  (set po_handle)"
-	@echo "   3. Settings → Actions → Read/write permissions"
-	@echo "   4. Settings → Actions → Allow GitHub Actions to approve pull requests"
+	@echo "   1. Settings → Actions → Read/write permissions"
+	@echo "   2. Settings → Actions → Allow GitHub Actions to approve pull requests"
 
 ## Install all GHAW files (overwrite existing)
 install-force:
