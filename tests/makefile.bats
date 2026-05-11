@@ -123,3 +123,17 @@ setup() {
   [[ "$output" == *"BUMP=minor"* ]]
   [[ "$output" == *"BUMP=major"* ]]
 }
+
+@test "Makefile.ghaw WORKFLOW_SPECS includes all expected state labels" {
+  cd "$REPO_ROOT"
+  # Extract the WORKFLOW_SPECS definition block
+  run grep -E 'open|ready|planned|in-progress|reviewed|blocked|defocus' Makefile.ghaw
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"open"* ]]
+  [[ "$output" == *"ready"* ]]
+  [[ "$output" == *"planned"* ]]
+  [[ "$output" == *"in-progress"* ]]
+  [[ "$output" == *"reviewed"* ]]
+  [[ "$output" == *"blocked"* ]]
+  [[ "$output" == *"defocus"* ]]
+}
