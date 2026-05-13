@@ -79,6 +79,27 @@ jobs:
       contents: read
     secrets: inherit
 
+  close-defocused:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Close any GitHub-open issues with defocus label
+        run: |
+          NUMBERS=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label defocus \
+            --state open \
+            --json number \
+            --jq '.[].number')
+          for NUMBER in $NUMBERS; do
+            gh issue close $NUMBER \
+              --repo ${{ github.repository }} \
+              --reason "not planned"
+            echo "🚫 #$NUMBER closed (defocus label detected)" >> $GITHUB_STEP_SUMMARY
+          done
+
   verify:
     needs: [prepare, run]
     if: needs.prepare.outputs.has_issues == 'true'
