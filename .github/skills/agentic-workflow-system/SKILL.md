@@ -42,7 +42,7 @@ Read [`references/AGENTIC_WORKFLOW_SYSTEM.md`](./references/AGENTIC_WORKFLOW_SYS
 before proceeding — it is your authoritative source for all architecture, naming conventions,
 file formats, and invariants.
 
-Use `vscode_askQuestions` to collect the following. Ask in one batched call; group logically.
+Use your questionaire tool (e.g. `vscode_askQuestions`) to collect the following. Ask in one batched call; group logically.
 
 ### Questions to Ask
 
@@ -131,9 +131,9 @@ planning:
 
 ### Idempotency
 - [ ] Running any workflow twice on the same issue produces the same state (no duplicates)
-- [ ] `setup-labels` and `install` in Makefile.ghaw are safe to re-run
+- [ ] `setup-labels` and `install` in Makefile.ghprj are safe to re-run
 
-**For each gap found**: iterate with the user using `vscode_askQuestions` until the design
+**For each gap found**: iterate with the user using your questionaire tool (e.g. `vscode_askQuestions`) until the design
 is gap-free. Do not proceed to Phase 3 until all gaps are resolved or explicitly accepted.
 
 ---
@@ -343,10 +343,10 @@ Command signals must exactly match what the verify step in the corresponding wor
 
 ---
 
-### Step 6: Makefile.ghaw Labels (bootstrap mode only)
+### Step 6: Makefile.ghprj Labels (bootstrap mode only)
 
 If implementing from scratch, add the new labels to the `setup-labels` target in
-`Makefile.ghaw`, or create a standalone bootstrap script that calls:
+`Makefile.ghprj`, or create a standalone bootstrap script that calls:
 
 ```bash
 gh api -X POST "repos/$REPO/labels" \
@@ -367,6 +367,88 @@ Standard checklist items:
 - Documentation updated where relevant
 - Security checks passed
 - Production-ready (no debug code, no TODO-for-prod)
+
+---
+
+### Step 8: Behavioral Simulation Testing (recommended)
+
+The skill ships a pure-Python simulation layer that lets you test state machine
+correctness **without running GitHub Actions or hitting the GitHub API**.  It lives
+in [`assets/sim/`](./assets/sim/) and has three layers:
+
+| Layer | What it is | What to do |
+|-------|------------|------------|
+| `assets/sim/models.py` | In-memory `Issue`, `PullRequest`, `Repository`, `StateHealer` | **Copy verbatim** — no changes needed |
+| `assets/sim/agents.py` | Abstract `StateAgent` / `StatelessAgent` base classes + `Engine` types | **Copy verbatim** — no changes needed |
+| `assets/sim/engine.py` | `Engine` loop + invariant enforcement (`InvariantViolation`) | **Copy verbatim** — no changes needed |
+| `assets/sim/project_agents_template.py` | Concrete agent skeleton with `[TODO]` markers | **Adapt** — one `StateAgent` subclass per state |
+| `assets/sim/test_state_machine_template.py` | pytest test skeleton with `[TODO]` markers | **Adapt** — fill in agent imports, fixtures, assertions |
+| `assets/sim/pyproject.toml` | uv project definition with `pytest` + `yamllint` dev deps | **Adapt** — update project name |
+
+#### Directory layout to create in the target repo
+
+```
+tests/
+    sim/                   ← copy assets/sim/{models,agents,engine,__init__}.py verbatim
+        __init__.py
+        models.py
+        agents.py
+        engine.py
+    <project>/             ← TODO: your project name (e.g. "ghaw", "myflow")
+        __init__.py
+        agents.py          ← adapt assets/sim/project_agents_template.py
+test_<project>_state_machine.py   ← adapt assets/sim/test_state_machine_template.py
+pyproject.toml             ← adapt assets/sim/pyproject.toml (repo root)
+```
+
+#### What you must adapt in `tests/<project>/agents.py`
+
+- `YOUR_STATE_LABELS` — exact set of state labels from `core-state-heal.yml`
+- One `StateAgent` subclass per owned state — implement all four hooks:
+  - `entry_trigger` — fire on SCHEDULE and/or LABEL_ADDED for this state
+  - `entry_action` — filter issues to candidates (exclude already-processed)
+  - `do_action` — delegate to injected `behavior` callable
+  - `exit_action` — mirror the `verify` bash step: check signals, apply labels
+- One built-in `behavior` factory per outcome (success, failure, no-output, …)
+- `StatelessAgent` subclasses for opportunistic agents (review, integrator, CI/CD)
+
+#### What you must adapt in `tests/test_<project>_state_machine.py`
+
+- Replace `YOUR_STATE_LABELS` with your actual label set
+- Replace `[STATE-A]` / `[NEXT-STATE]` placeholders throughout
+- Add one `TestXxxAgent` class per agent with at minimum:
+  - `test_promotes_on_success` — happy path
+  - `test_blocks_on_no_output` — agent crash/timeout
+  - `test_idempotent_when_already_promoted` — no double-processing
+- Implement `test_happy_path` using single-agent `Engine` instances per step
+  (all agents fire on every tick — use separate engines to test step by step)
+
+#### Run the simulation
+
+```bash
+# Install dev deps (first time or after pyproject.toml changes)
+uv sync
+
+# Run all simulation tests
+uv run pytest tests/test_<project>_state_machine.py
+
+# Add a make target for convenience
+# In Makefile:
+#   YAMLLINT := uv run yamllint
+#   test-sim:
+#       @uv run pytest tests/test_<project>_state_machine.py
+```
+
+#### Key design rules (do not break these)
+
+- **`tests/sim/` is never modified** — it is the generic core; changes belong in
+  `tests/<project>/agents.py`
+- **`exit_action` always mirrors the bash verify step** — if the verify step checks
+  for `<!-- MY-SIGNAL -->`, `exit_action` must check `issue.has_signal("<!-- MY-SIGNAL -->")`
+- **`entry_action` must be idempotent** — exclude issues that already have a plan
+  comment / success signal to prevent double-processing on re-fire
+- **`entry_trigger` must react to both SCHEDULE and LABEL_ADDED** for event-driven
+  agents (manual retries by PO must be testable)
 
 ---
 
@@ -457,6 +539,19 @@ for CMD in .opencode/commands/*.md; do
     grep -rl "$MARKER" .github/workflows/ || echo "WARNING: $SIGNAL from $CMD not found in any workflow"
   done
 done
+```
+
+### Behavioral Simulation Checks (if simulation layer was set up in Phase 5 Step 8)
+```bash
+# Install dev deps
+uv sync
+
+# Run state machine simulation tests — must all pass before merging
+uv run pytest tests/test_<project>_state_machine.py
+
+# Spot-check: every state agent has at least a success and no-output test
+grep -l "test_blocks_on_no_output" tests/test_*state_machine*.py \
+  || echo "WARNING: no no-output test found — agent crash path is untested"
 ```
 
 ### Final Checklist
