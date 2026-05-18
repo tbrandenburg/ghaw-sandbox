@@ -15,9 +15,10 @@ A pattern for running an **LLM-driven state machine** entirely inside GitHub Act
 7. [Agent Definitions](#agent-definitions)
 8. [Command Definitions](#command-definitions)
 9. [Configuration](#configuration)
-10. [Reliability Principles](#reliability-principles)
-11. [Extending the System](#extending-the-system)
-12. [Validation Rules](#validation-rules)
+10. [Tooling & Bootstrap](#tooling--bootstrap)
+11. [Reliability Principles](#reliability-principles)
+12. [Extending the System](#extending-the-system)
+13. [Validation Rules](#validation-rules)
 
 ---
 
@@ -59,6 +60,12 @@ Agents act via `gh` CLI and `git`. They signal intent through structured comment
 │  Configuration                                                      │
 │  ───────────────────────────────────────────────────────────────   │
 │  .github/config/config.yml    model, WIP limits, thresholds        │
+│                                                                     │
+│  Tooling (local, not committed to target repos)                     │
+│  ───────────────────────────────────────────────────────────────   │
+│  Makefile          lint, test, git hooks                           │
+│  Makefile.ghaw     install system into target repo, setup labels,  │
+│                    manage releases                                  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -512,6 +519,90 @@ Add any additional thresholds or feature flags here rather than hardcoding them 
 
 ---
 
+## Tooling & Bootstrap
+
+Two Makefiles ship alongside the system. They are used locally and in the source repo — they are **not** deployed into target repos as runtime dependencies.
+
+| File | Purpose |
+|---|---|
+| `Makefile` | Local developer tooling: lint, test, git hooks |
+| `Makefile.ghaw` | Bootstrap installer: copy system files into a target repo, create labels idempotently, manage releases |
+
+### `Makefile` — Developer Tooling
+
+Used to validate the system files themselves during development.
+
+```bash
+make install        # Install lint tools (yamllint, actionlint, markdownlint) + configure git hooks
+make lint           # Run all linters (lint-yaml + lint-actions + lint-markdown)
+make lint-yaml      # yamllint on .github/
+make lint-actions   # actionlint on .github/workflows/*.yml
+make lint-markdown  # markdownlint on all *.md files
+make test           # lint + BATS behavioral tests
+```
+
+### `Makefile.ghaw` — Bootstrap Installer
+
+Used once when adopting the system in a new repo, and again whenever files need updating.
+
+**Installation:**
+
+```bash
+make -f Makefile.ghaw install           # Copy system files into current repo (skip existing)
+make -f Makefile.ghaw install-force     # Copy and overwrite all files
+make -f Makefile.ghaw install-dry       # Preview what would be copied, no changes
+make -f Makefile.ghaw clean             # Remove all installed files
+```
+
+**Label management** (idempotent — safe to run multiple times):
+
+```bash
+make -f Makefile.ghaw setup-labels      # Create or update all required labels in the repo
+make -f Makefile.ghaw setup-labels-dry  # Preview label changes without applying
+make -f Makefile.ghaw list-labels       # Show all current labels in the repo
+```
+
+The `setup-labels` target uses the GitHub API (`gh api`) to create labels that do not exist and patch labels whose colour or description has drifted. It is safe to re-run at any time. Labels are grouped into categories and applied in batches:
+
+```bash
+# Under the hood, each label is applied via:
+gh api -X POST "repos/$REPO/labels"          # create
+gh api -X PATCH "repos/$REPO/labels/$NAME"   # update if already exists
+```
+
+URL-encoding of label names (e.g., `in-progress` → `in-progress`, `type/bug` → `type%2Fbug`) is handled automatically via `python3 -c 'import urllib.parse,...'`.
+
+**Configuration and release management:**
+
+```bash
+make -f Makefile.ghaw info                   # Show installed version and config.yml
+make -f Makefile.ghaw publish BUMP=patch     # Bump patch version, tag, push, create GitHub release
+make -f Makefile.ghaw publish BUMP=minor     # Bump minor version
+make -f Makefile.ghaw publish BUMP=major     # Bump major version
+make -f Makefile.ghaw initial-release        # Create release for current version without bumping
+```
+
+The `publish` target enforces:
+- There must be at least one new commit since the last tag (prevents empty releases)
+- `RELEASE_NOTES.md` must not contain unedited placeholder HTML comments before the release is created
+
+**Options:**
+
+```bash
+make -f Makefile.ghaw setup-labels REPO=owner/name   # Override target repo
+make -f Makefile.ghaw setup-labels VERBOSE=true      # Show full gh API calls
+make -f Makefile.ghaw setup-labels DEBUG=true        # Show label parameters before each API call
+```
+
+### Post-install steps
+
+After running `make -f Makefile.ghaw install`, two GitHub repository settings must be enabled manually (not configurable via API):
+
+1. **Settings → Actions → General → Workflow permissions** → set to *Read and write permissions*
+2. **Settings → Actions → General** → enable *Allow GitHub Actions to create and approve pull requests*
+
+---
+
 ## Reliability Principles
 
 ### 1. State labels are mutually exclusive
@@ -625,6 +716,19 @@ jobs:
 ## Validation Rules
 
 Shell checks an agent can run to verify a repo correctly implements this system.
+
+### Linting
+
+See [Tooling & Bootstrap](#tooling--bootstrap) for full tool installation instructions. Quick reference:
+
+```bash
+make install      # install yamllint, actionlint, markdownlint + configure git hooks
+make lint         # run all linters
+make lint-yaml    # yamllint -c .yamllint.yml .github/
+make lint-actions # ./actionlint -shellcheck= .github/workflows/*.yml
+```
+
+`actionlint` validates Actions-specific concerns: expression syntax, context variable references, `uses:` action versions, and step `id` references. The `-shellcheck=` flag disables shell script linting inside `run:` steps — remove it if `shellcheck` is installed.
 
 ### Structural
 
