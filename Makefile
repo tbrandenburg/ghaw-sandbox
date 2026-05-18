@@ -1,13 +1,13 @@
-.PHONY: test lint lint-yaml lint-actions lint-markdown install hooks test-bats test-prompts test-workflows
+.PHONY: test lint lint-yaml lint-actions lint-markdown install hooks test-bats test-prompts test-workflows test-sim
 
-YAMLLINT    := yamllint
+YAMLLINT    := uv run yamllint
 ACTIONLINT  := ./actionlint
 MARKDOWNLINT := markdownlint
 BATS        := $(shell command -v bats 2>/dev/null || echo "./tests/bin/bats")
 
 ## install: Install required lint tools and configure git hooks
 install:
-	pip install --quiet yamllint
+	uv sync
 	npm install -g markdownlint-cli
 	@if [ ! -f ./actionlint ]; then \
 		curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash; \
@@ -15,7 +15,7 @@ install:
 	@$(MAKE) hooks
 
 ## test: Run linters and behavioral tests
-test: lint test-bats
+test: lint test-bats test-sim
 
 ## lint: Lint YAML, GitHub Actions, and Markdown files
 lint: lint-yaml lint-actions lint-markdown
@@ -63,6 +63,12 @@ test-prompts: test-bats
 
 ## test-workflows: Run workflow structural tests (alias for test-bats)
 test-workflows: test-bats
+
+## test-sim: Run Python state machine simulation tests
+test-sim:
+	@echo "--- pytest (state machine simulation) ---"
+	@uv run pytest tests/test_ghaw_state_machine.py
+
 ## hooks: Configure git to use .githooks directory
 hooks:
 	@echo "Configuring git hooks path..."

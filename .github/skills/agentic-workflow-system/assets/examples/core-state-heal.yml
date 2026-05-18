@@ -1,0 +1,58 @@
+name: GHAW - Issue State Healer
+
+# Event-driven: fires whenever a label is added to any issue.
+# If the label is a state label and the issue now carries more than one
+# state label, heals it by keeping the one just added and removing the rest.
+#
+# State labels (mutually exclusive): open, ready, planned, in-progress, reviewed, blocked, defocus
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  heal:
+    # Only run if the added label is a state label
+    if: |
+      contains(fromJSON('["open","ready","planned","in-progress","reviewed","blocked","defocus"]'),
+               github.event.label.name)
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Heal ambiguous state labels on issue ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+
+          STATE_LABELS="open ready planned in-progress reviewed blocked defocus"
+          REPO="${{ github.repository }}"
+          NUMBER="${{ github.event.issue.number }}"
+          ADDED="${{ github.event.label.name }}"
+
+          # Fetch current labels
+          CURRENT=$(gh api "repos/$REPO/issues/$NUMBER" \
+            --jq '[.labels[].name]')
+
+          # Count state labels currently set
+          STATE_COUNT=$(echo "$CURRENT" | jq \
+            --argjson states '["open","ready","planned","in-progress","reviewed","blocked","defocus"]' \
+            '[.[] | select(. as $l | $states | index($l) != null)] | length')
+
+          if [ "$STATE_COUNT" -le "1" ]; then
+            echo "✅ #$NUMBER — state is clean (\`$ADDED\`), nothing to heal" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          echo "⚠️ #$NUMBER — $STATE_COUNT state labels detected, healing to \`$ADDED\`" >> $GITHUB_STEP_SUMMARY
+
+          # Remove every state label except the one just added
+          for LABEL in $STATE_LABELS; do
+            [ "$LABEL" = "$ADDED" ] && continue
+            IS_SET=$(echo "$CURRENT" | jq --arg l "$LABEL" 'contains([$l])')
+            if [ "$IS_SET" = "true" ]; then
+              gh issue edit "$NUMBER" --repo "$REPO" --remove-label "$LABEL"
+              echo "  removed \`$LABEL\`" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          echo "✅ #$NUMBER healed → \`$ADDED\`" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,96 @@
+name: '[SYSTEM] - [Agent Name] Agent'
+# Stateless agent — operates opportunistically, no required input state label.
+# Replace:
+#   [SYSTEM]         — short system prefix used in workflow names
+#   [AGENT-NAME]     — the OpenCode agent persona (maps to .opencode/agent/[AGENT-NAME].md)
+#   [COMMAND-NAME]   — the OpenCode command (maps to .opencode/commands/[COMMAND-NAME].md)
+
+on:
+  schedule:
+    - cron: '0 * * * *'    # Every full hour — adjust to your cadence
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_candidates: ${{ steps.filter.outputs.has_candidates }}
+      prompt:         ${{ steps.build.outputs.prompt }}
+      model:          ${{ steps.config.outputs.model }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
+
+      - name: Detect work to do
+        id: filter
+        run: |
+          set -euo pipefail
+
+          # TODO: Replace this with your own detection logic.
+          # Example: find open PRs with CI failures, stale issues, etc.
+          # CANDIDATES=$(gh pr list --repo ${{ github.repository }} --state open \
+          #   --json number,statusCheckRollup \
+          #   --jq '[.[] | select(
+          #     (.statusCheckRollup | map(select(.conclusion == "FAILURE")) | length) > 0
+          #   )]')
+          CANDIDATES="[]"
+
+          COUNT=$(echo "$CANDIDATES" | jq length)
+          if [ "$COUNT" = "0" ]; then
+            echo "has_candidates=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_candidates=true" >> $GITHUB_OUTPUT
+          fi
+          {
+            echo 'CANDIDATES<<EOF'
+            echo "$CANDIDATES"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Build prompt
+        id: build
+        if: steps.filter.outputs.has_candidates == 'true'
+        run: |
+          echo "prompt=$(echo "$CANDIDATES" | jq -Rs .)" >> $GITHUB_OUTPUT
+
+  run:
+    needs: prepare
+    if: needs.prepare.outputs.has_candidates == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name:        '[COMMAND-NAME]-agent'
+      command:         '[COMMAND-NAME]'
+      prompt:          ${{ needs.prepare.outputs.prompt }}
+      agent:           '[AGENT-NAME]'
+      model:           ${{ needs.prepare.outputs.model }}
+      timeout-minutes: 60
+    permissions:
+      issues:        write
+      pull-requests: write
+      contents:      write
+    secrets: inherit
+
+  # verify is optional for stateless agents.
+  # Add it if the agent must produce a measurable output you can check programmatically.
+  # verify:
+  #   needs: [prepare, run]
+  #   if: needs.prepare.outputs.has_candidates == 'true'
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #   steps:
+  #     - name: Verify agent output
+  #       run: |
+  #         set -euo pipefail
+  #         # Re-read from API and assert expected outcome

@@ -1,0 +1,181 @@
+name: '[SYSTEM] - [State Label] State Workflow'
+# Replace:
+#   [STATE-LABEL]    — the state label this workflow owns (e.g. ready, planned)
+#   [AGENT-NAME]     — the OpenCode agent persona (maps to .opencode/agent/[AGENT-NAME].md)
+#   [COMMAND-NAME]   — the OpenCode command (maps to .opencode/commands/[COMMAND-NAME].md)
+#   [NEXT-STATE]     — the label to apply on success
+#   [SIGNAL-MARKER]  — the HTML comment marker the agent posts on success, e.g. <!-- DONE -->
+#   [SYSTEM]         — short system prefix used in workflow names
+
+on:
+  issues:
+    types: [labeled]               # React immediately when [STATE-LABEL] is applied
+  schedule:
+    - cron: '0 */6 * * *'          # Catch-up every 6h — adjust to your cadence
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to process (leave empty to scan all [STATE-LABEL] issues)'
+        required: false
+        type: number
+
+jobs:
+  prepare:
+    # Guard: only run for the correct label event, or for schedule/dispatch.
+    if: |
+      (github.event_name == 'issues' && github.event.label.name == '[STATE-LABEL]') ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      has_candidates: ${{ steps.filter.outputs.has_candidates }}
+      issue_number:   ${{ steps.filter.outputs.issue_number }}
+      prompt:         ${{ steps.build.outputs.prompt }}
+      model:          ${{ steps.config.outputs.model }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
+
+      - name: Find candidates
+        id: filter
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            ISSUE_NUMBER=${{ github.event.issue.number }}
+          elif [ -n "${{ inputs.issue_number }}" ]; then
+            ISSUE_NUMBER=${{ inputs.issue_number }}
+          else
+            ISSUE_NUMBER=""
+          fi
+
+          if [ -n "$ISSUE_NUMBER" ]; then
+            # Single-issue mode: check whether the issue still needs processing
+            # (not already signalled in this run)
+            ALREADY_DONE=$(gh issue view "$ISSUE_NUMBER" \
+              --repo ${{ github.repository }} \
+              --json comments \
+              --jq '[.comments[].body | contains("[SIGNAL-MARKER]")] | any')
+            if [ "$ALREADY_DONE" = "true" ]; then
+              echo "has_candidates=false" >> $GITHUB_OUTPUT
+            else
+              echo "has_candidates=true"  >> $GITHUB_OUTPUT
+              echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+            fi
+          else
+            # Batch mode: find all issues in [STATE-LABEL] not yet processed
+            ISSUES=$(gh issue list \
+              --repo ${{ github.repository }} \
+              --label "[STATE-LABEL]" \
+              --json number,title,body,labels,comments)
+            COUNT=$(echo "$ISSUES" | jq length)
+            if [ "$COUNT" = "0" ]; then
+              echo "has_candidates=false" >> $GITHUB_OUTPUT
+            else
+              echo "has_candidates=true" >> $GITHUB_OUTPUT
+            fi
+            {
+              echo 'ISSUES<<EOF'
+              echo "$ISSUES"
+              echo 'EOF'
+            } >> $GITHUB_ENV
+          fi
+
+      - name: Build prompt
+        id: build
+        if: steps.filter.outputs.has_candidates == 'true'
+        run: |
+          # Assemble context for the agent.
+          # In single-issue mode, fetch full issue detail.
+          # In batch mode, use the ISSUES env var collected above.
+          if [ -n "${{ steps.filter.outputs.issue_number }}" ]; then
+            ISSUE=$(gh issue view ${{ steps.filter.outputs.issue_number }} \
+              --repo ${{ github.repository }} \
+              --json number,title,body,labels,comments)
+            CONTEXT=$(echo "$ISSUE" | jq -c .)
+          else
+            CONTEXT=$(echo "$ISSUES" | jq -c .)
+          fi
+          echo "prompt=$(echo "$CONTEXT" | jq -Rs .)" >> $GITHUB_OUTPUT
+
+  run:
+    needs: prepare
+    if: needs.prepare.outputs.has_candidates == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name:        '[COMMAND-NAME]-agent'
+      command:         '[COMMAND-NAME]'
+      prompt:          ${{ needs.prepare.outputs.prompt }}
+      agent:           '[AGENT-NAME]'
+      model:           ${{ needs.prepare.outputs.model }}
+      timeout-minutes: 60
+    permissions:
+      issues:        write
+      contents:      read
+    secrets: inherit
+
+  verify:
+    needs: [prepare, run]
+    if: needs.prepare.outputs.has_candidates == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Apply state transition for issue ${{ needs.prepare.outputs.issue_number }}
+        run: |
+          set -euo pipefail
+
+          # In single-issue mode, verify the specific issue.
+          # In batch mode, iterate over all issues that were candidates.
+          if [ -n "${{ needs.prepare.outputs.issue_number }}" ]; then
+            ISSUE_NUMBERS="${{ needs.prepare.outputs.issue_number }}"
+          else
+            # Re-read from API — never trust in-memory variables for state decisions
+            ISSUE_NUMBERS=$(gh issue list \
+              --repo ${{ github.repository }} \
+              --label "[STATE-LABEL]" \
+              --json number \
+              --jq '.[].number')
+          fi
+
+          FAILED=0
+          for ISSUE in $ISSUE_NUMBERS; do
+            # Always re-read from the API
+            COMMENTS=$(gh issue view "$ISSUE" \
+              --repo ${{ github.repository }} \
+              --json comments \
+              --jq '[.comments[].body]')
+
+            HAS_SIGNAL=$(echo "$COMMENTS" | jq '[.[] | contains("[SIGNAL-MARKER]")] | any')
+
+            if [ "$HAS_SIGNAL" = "true" ]; then
+              gh issue edit "$ISSUE" \
+                --repo ${{ github.repository }} \
+                --add-label "[NEXT-STATE]" \
+                --remove-label "[STATE-LABEL]"
+              echo "✅ #$ISSUE → [NEXT-STATE]" >> $GITHUB_STEP_SUMMARY
+            else
+              gh issue edit "$ISSUE" \
+                --repo ${{ github.repository }} \
+                --add-label "blocked" \
+                --remove-label "[STATE-LABEL]"
+              gh issue comment "$ISSUE" \
+                --repo ${{ github.repository }} \
+                --body "❌ Agent did not produce required signal ([SIGNAL-MARKER]). Blocked for human review."
+              echo "❌ #$ISSUE → blocked" >> $GITHUB_STEP_SUMMARY
+              FAILED=1
+            fi
+          done
+
+          exit $FAILED

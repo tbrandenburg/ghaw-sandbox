@@ -1,0 +1,204 @@
+name: Core - Reusable OpenCode Run
+
+on:
+  workflow_call:
+    inputs:
+      run-name:
+        description: 'Name of the run (e.g., security, safety, performance)'
+        required: true
+        type: string
+      prompt:
+        description: 'The prompt content to use for the run (mutually exclusive with prompt-file)'
+        required: false
+        type: string
+      prompt-file:
+        description: 'Path to the prompt file (e.g., .github/prompts/security.prompt.md) (mutually exclusive with prompt)'
+        required: false
+        type: string
+      timeout-minutes:
+        description: 'Timeout for the run job in minutes'
+        required: false
+        type: number
+        default: 120
+      model:
+        description: 'OpenCode model to use for the run'
+        required: false
+        type: string
+        default: 'opencode/big-pickle'
+      agent:
+        description: 'Agent to use for OpenCode run'
+        required: false
+        type: string
+        default: 'build'
+      command:
+        description: 'Command to use for OpenCode run (alternative to prompt/prompt-file)'
+        required: false
+        type: string
+      runner:
+        description: 'Runner to use for the job'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+    outputs:
+      results:
+        description: 'The output results from OpenCode (truncated if too large)'
+        value: ${{ jobs.run.outputs.results }}
+      results-truncated:
+        description: 'Whether the results were truncated due to size'
+        value: ${{ jobs.run.outputs.results-truncated }}
+      artifact-name:
+        description: 'Name of the uploaded artifact containing full results'
+        value: ${{ jobs.run.outputs.artifact-name }}
+
+env:
+  OPENCODE_INSTALL_URL: 'https://opencode.ai/install'
+  MAX_OUTPUT_LINES: 50
+
+jobs:
+  run:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    outputs:
+      results: ${{ steps.process-results.outputs.results }}
+      results-truncated: ${{ steps.process-results.outputs.results-truncated }}
+      artifact-name: ${{ steps.process-results.outputs.artifact-name }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup and Install OpenCode
+        run: |
+          # Add OpenCode to PATH first
+          echo "$HOME/.opencode/bin" >> $GITHUB_PATH
+
+          # Check if OpenCode is already installed and working
+          if command -v opencode >/dev/null 2>&1 && opencode --version >/dev/null 2>&1; then
+            echo "OpenCode is already installed and working"
+            opencode --version
+          else
+            echo "OpenCode not found or not working, installing..."
+
+            echo "System information:"
+            echo "OS: $(uname -s)"
+            echo "Arch: $(uname -m)"
+            echo "Install URL: ${{ env.OPENCODE_INSTALL_URL }}"
+
+            if ! curl -fsSL ${{ env.OPENCODE_INSTALL_URL }} | bash; then
+              echo "WARNING: Latest OpenCode installation failed (GitHub API unreachable?). Falling back to pinned version 1.14.40."
+              if ! curl -fsSL ${{ env.OPENCODE_INSTALL_URL }} | bash -s -- --version 1.14.40; then
+                echo "ERROR: Pinned fallback installation also failed"
+                exit 1
+              fi
+            fi
+
+            echo "OpenCode installation completed"
+
+            if ! env -i PATH="$HOME/.opencode/bin:$PATH" HOME="$HOME" GH_TOKEN="$GH_TOKEN" opencode --version; then
+              echo "ERROR: OpenCode installation verification failed"
+              echo "Checking installation directory:"
+              ls -la "$HOME/.opencode/bin/" || echo "Installation directory not found"
+              exit 1
+            fi
+          fi
+
+      - name: Write prompt to file
+        if: ${{ inputs.prompt != '' }}
+        env:
+          PROMPT_CONTENT: ${{ inputs.prompt }}
+        run: printf '%s' "$PROMPT_CONTENT" > _prompt.txt
+
+      - name: Run OpenCode ${{ inputs.run-name }}
+        env:
+          OPENCODE_PATH: "$HOME/.opencode/bin"
+        run: |
+          OC="env -i PATH=$HOME/.opencode/bin:$PATH HOME=$HOME GH_TOKEN=$GH_TOKEN opencode"
+          CMD="${{ inputs.command }}"
+          MODEL="${{ inputs.model }}"
+          AGENT="${{ inputs.agent }}"
+          OUT="${{ inputs.run-name }}-results.txt"
+
+          if [ -f "_prompt.txt" ]; then
+            PROMPT_SRC="_prompt.txt"
+          elif [ -n "${{ inputs.prompt-file }}" ]; then
+            PROMPT_SRC="${{ inputs.prompt-file }}"
+          else
+            PROMPT_SRC=""
+          fi
+
+          if [ -n "$CMD" ]; then
+            if [ -n "$PROMPT_SRC" ]; then
+              cat "$PROMPT_SRC" | $OC run --command "$CMD" --model "$MODEL" --agent "$AGENT" > "$OUT"
+            else
+              $OC run --command "$CMD" --model "$MODEL" --agent "$AGENT" > "$OUT"
+            fi
+          elif [ -n "$PROMPT_SRC" ]; then
+            cat "$PROMPT_SRC" | $OC run --model "$MODEL" --agent "$AGENT" > "$OUT"
+          else
+            echo "Error: At least one of 'command', 'prompt', or 'prompt-file' must be provided" >&2
+            exit 1
+          fi
+
+      - name: Cleanup transient prompt file
+        if: always()
+        run: rm -f _prompt.txt
+
+      - name: Process results for output
+        id: process-results
+        if: always()
+        run: |
+          RESULTS_FILE="${{ inputs.run-name }}-results.txt"
+          ARTIFACT_NAME="${{ inputs.run-name }}-results"
+
+          if [ -f "$RESULTS_FILE" ]; then
+            FILE_SIZE=$(wc -c < "$RESULTS_FILE")
+            MAX_SIZE=65000
+
+            echo "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+
+            if [ $FILE_SIZE -gt $MAX_SIZE ]; then
+              echo "results-truncated=true" >> $GITHUB_OUTPUT
+
+              {
+                echo "# OpenCode Results (Truncated)"
+                echo ""
+                echo "⚠️ **Results were truncated due to size limits. Full results are available in the artifact.**"
+                echo ""
+                echo "**File size:** $FILE_SIZE bytes (limit: $MAX_SIZE bytes)"
+                echo ""
+                echo "---"
+                echo ""
+                head -c $((MAX_SIZE - 1000)) "$RESULTS_FILE"
+                echo ""
+                echo ""
+                echo "..."
+                echo ""
+                echo "**[Full results available in artifact: $ARTIFACT_NAME]**"
+              } > truncated-results.txt
+
+              echo "results<<EOF" >> $GITHUB_OUTPUT
+              cat truncated-results.txt >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+            else
+              echo "results-truncated=false" >> $GITHUB_OUTPUT
+              echo "results<<EOF" >> $GITHUB_OUTPUT
+              cat "$RESULTS_FILE" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "results-truncated=false" >> $GITHUB_OUTPUT
+            echo "results=❌ No results file generated" >> $GITHUB_OUTPUT
+            echo "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload ${{ inputs.run-name }} Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ inputs.run-name }}-results
+          path: ${{ inputs.run-name }}-results.txt

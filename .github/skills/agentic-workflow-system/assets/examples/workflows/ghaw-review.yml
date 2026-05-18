@@ -1,0 +1,158 @@
+name: GHAW - Review Agent
+
+on:
+  schedule:
+    - cron: '0 * * * *'    # Every full hour
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_candidates: ${{ steps.filter.outputs.has_candidates }}
+      prompt:         ${{ steps.build.outputs.prompt }}
+      model:          ${{ steps.config.outputs.model }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
+
+      - name: Find reviewable PRs
+        id: filter
+        run: |
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,headRefName,statusCheckRollup,reviews,commits,body,title,reviewDecision)
+
+          # Case 1: PRs with no reviews yet and no failing CI → first review
+          FIRST_REVIEW=$(echo "$OPEN_PRS" | jq '[.[] | select(
+            (.statusCheckRollup | map(select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")) | length) == 0 and
+            (.reviews | length) == 0
+          )]')
+
+          # Case 2: PRs with CHANGES_REQUESTED where dev pushed new commits after the review
+          # i.e. head commit OID != the commit OID of the last CHANGES_REQUESTED review
+          RE_REVIEW=$(echo "$OPEN_PRS" | jq '[.[] | select(
+            .reviewDecision == "CHANGES_REQUESTED" and
+            (.statusCheckRollup | map(select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")) | length) == 0 and
+            ((.reviews | map(select(.state == "CHANGES_REQUESTED")) | last) // null) as $last_cr |
+            ((.commits | last) // null) as $head |
+            $last_cr != null and
+            $head != null and
+            $last_cr.commit.oid != $head.oid
+          )]')
+
+          CANDIDATES=$(echo "$FIRST_REVIEW $RE_REVIEW" | jq -s 'add | unique_by(.number)')
+
+          COUNT=$(echo "$CANDIDATES" | jq length)
+          if [ "$COUNT" = "0" ]; then
+            echo "has_candidates=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_candidates=true"  >> $GITHUB_OUTPUT
+          fi
+          {
+            echo 'CANDIDATES<<EOF'
+            echo "$CANDIDATES"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Collect PR diffs and issues
+        if: env.CANDIDATES != '[]'
+        run: |
+          REVIEW_DATA="[]"
+          for PR in $(echo "$CANDIDATES" | jq -r '.[].number'); do
+            DIFF=$(gh pr diff $PR 2>/dev/null | head -500 || echo "(no diff)")
+            META=$(gh pr view $PR --json body,title,number)
+            ISSUE_NUMBER=$(echo "$META" | jq -r '.body' | grep -oP '(?<=Closes #)\d+' | head -1)
+            ISSUE=""
+            if [ -n "$ISSUE_NUMBER" ]; then
+              ISSUE=$(gh issue view $ISSUE_NUMBER --json number,title,body,comments 2>/dev/null || echo "{}")
+            fi
+            REVIEW_DATA=$(echo "$REVIEW_DATA" | jq --argjson meta "$META" \
+              --arg diff "$DIFF" --argjson issue "$ISSUE" \
+              '. + [{"pr": $meta, "diff": $diff, "issue": $issue}]')
+          done
+          {
+            echo 'REVIEW_DATA<<EOF'
+            echo "$REVIEW_DATA"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Build prompt
+        id: build
+        run: |
+          PROMPT="Repo owner: @${{ github.repository_owner }}
+          PRs to review: $REVIEW_DATA"
+          echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
+
+  run:
+    needs: prepare
+    if: needs.prepare.outputs.has_candidates == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name: review-agent
+      command:  ghaw-review
+      prompt:   ${{ needs.prepare.outputs.prompt }}
+      agent:    review
+      model:    ${{ needs.prepare.outputs.model }}
+      timeout-minutes: 60
+    permissions:
+      issues:        write
+      pull-requests: write
+      contents:      read
+    secrets: inherit
+
+  verify:
+    needs: [prepare, run]
+    if: needs.prepare.outputs.has_candidates == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Apply state transitions based on review outcome
+        run: |
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,body,reviewDecision)
+
+          for PR in $(echo "$OPEN_PRS" | jq -r '.[].number'); do
+            ISSUE_NUM=$(gh pr view $PR \
+              --repo ${{ github.repository }} \
+              --json body --jq '.body' \
+              | grep -oP '(?<=Closes #)\d+' | head -1)
+            [ -z "$ISSUE_NUM" ] && continue
+
+            # Check if agent posted a passing review summary on this PR
+            PASSED=$(gh api repos/${{ github.repository }}/issues/$PR/comments \
+              --jq '[.[] | select(.body | contains("✅ Technical review passed"))] | length > 0')
+
+            if [ "$PASSED" = "true" ]; then
+              gh issue edit $ISSUE_NUM \
+                --repo ${{ github.repository }} \
+                --add-label "reviewed" \
+                --remove-label "in-progress" \
+                --remove-label "ready" \
+                --remove-label "open" \
+                --remove-label "blocked"
+              echo "✅ #$ISSUE_NUM → reviewed (PR #$PR)" >> $GITHUB_STEP_SUMMARY
+            else
+              DECISION=$(gh pr view $PR --json reviewDecision --jq '.reviewDecision')
+              echo "PR #$PR: no passing review detected (decision: $DECISION)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done

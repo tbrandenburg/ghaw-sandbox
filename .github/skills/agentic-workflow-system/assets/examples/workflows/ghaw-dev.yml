@@ -1,0 +1,157 @@
+name: GHAW - Dev Agent
+
+on:
+  schedule:
+    - cron: '0 * * * *'    # Every full hour
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_candidates: ${{ steps.filter.outputs.has_candidates }}
+      prompt:         ${{ steps.build.outputs.prompt }}
+      model:          ${{ steps.config.outputs.model }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
+
+      - name: Fetch in-progress issues and open PRs
+        id: filter
+        run: |
+          IN_PROGRESS=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label in-progress \
+            --json number,title,body,labels,comments)
+
+          # Guard: exclude issues also carrying reviewed — they have a PR awaiting merge
+          IN_PROGRESS=$(echo "$IN_PROGRESS" | jq '[.[] | select(
+            ([.labels[].name] | contains(["reviewed"])) | not
+          )]')
+
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,headRefName,body,reviewDecision,reviews,commits)
+
+          # Case 1: in-progress issues with no linked PR at all → implement
+          NO_PR=$(echo "$IN_PROGRESS" | jq --argjson prs "$OPEN_PRS" '
+            . as $issues |
+            $issues | map(
+              . as $issue |
+              ($prs | map(.body | test("Closes #\($issue.number)"; "i")) | any) as $has_pr |
+              if $has_pr then empty else . end
+            )')
+
+          # Case 2: in-progress issues whose linked PR has CHANGES_REQUESTED
+          # and no new commits have been pushed since the last CHANGES_REQUESTED review
+          # (new commits = dev already pushed a fix, leave for review agent to re-review)
+          NEEDS_FIX=$(echo "$IN_PROGRESS" | jq --argjson prs "$OPEN_PRS" '
+            . as $issues |
+            $issues | map(
+              . as $issue |
+              ($prs | map(
+                select(.body | test("Closes #\($issue.number)"; "i")) |
+                select(.reviewDecision == "CHANGES_REQUESTED") |
+                # Only include if head commit matches the commit the review was left on
+                # (meaning dev has not yet pushed fixes)
+                ((.reviews | map(select(.state == "CHANGES_REQUESTED")) | last) // null) as $last_cr |
+                ((.commits | last) // null) as $head |
+                select(
+                  $last_cr != null and
+                  $head != null and
+                  $last_cr.commit.oid == $head.oid
+                )
+              ) | length > 0) as $needs_fix |
+              if $needs_fix then . else empty end
+            )')
+
+          CANDIDATES=$(echo "$NO_PR $NEEDS_FIX" | jq -s 'add | unique_by(.number)')
+
+          COUNT=$(echo "$CANDIDATES" | jq length)
+          if [ "$COUNT" = "0" ]; then
+            echo "has_candidates=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_candidates=true" >> $GITHUB_OUTPUT
+          fi
+
+          {
+            echo 'CANDIDATES<<EOF'
+            echo "$CANDIDATES"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+          {
+            echo 'OPEN_PRS<<EOF'
+            echo "$OPEN_PRS"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Build prompt
+        id: build
+        run: |
+          PROMPT="In-progress issues to action (either no PR yet, or PR has CHANGES_REQUESTED with no new commits): $CANDIDATES
+          Open PRs: $OPEN_PRS"
+          echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
+
+  run:
+    needs: prepare
+    if: needs.prepare.outputs.has_candidates == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name: dev-agent
+      command:  ghaw-dev-issue
+      prompt:   ${{ needs.prepare.outputs.prompt }}
+      agent:    dev
+      model:    ${{ needs.prepare.outputs.model }}
+      timeout-minutes: 60
+    permissions:
+      issues:        write
+      pull-requests: write
+      contents:      write
+    secrets: inherit
+
+  verify:
+    needs: [prepare, run]
+    if: needs.prepare.outputs.has_candidates == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Verify PR exists for each candidate
+        run: |
+          IN_PROGRESS=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label in-progress \
+            --json number,title,labels \
+            | jq '[.[] | select([.labels[].name] | contains(["blocked"]) | not)]')
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,body)
+
+          FAILED=0
+          for NUMBER in $(echo "$IN_PROGRESS" | jq -r '.[].number'); do
+            HAS_PR=$(echo "$OPEN_PRS" | jq --argjson n "$NUMBER" \
+              '[.[] | select(.body | test("Closes #\($n)"; "i"))] | length > 0')
+            if [ "$HAS_PR" = "true" ]; then
+              echo "✅ PR exists for issue #$NUMBER" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ No PR found for issue #$NUMBER" >> $GITHUB_STEP_SUMMARY
+              gh issue comment $NUMBER \
+                --repo ${{ github.repository }} \
+                --body "❌ Dev Agent ran but did not create a PR for this issue. Will retry on next cycle."
+              FAILED=1
+            fi
+          done
+          exit $FAILED

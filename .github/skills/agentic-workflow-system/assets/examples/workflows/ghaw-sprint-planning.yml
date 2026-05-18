@@ -1,0 +1,170 @@
+name: GHAW - Sprint Planning Agent
+
+on:
+  schedule:
+    - cron: '0 1,7,13,19 * * *'    # Every 6h at :01 (1h after grooming)
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_candidates: ${{ steps.fetch.outputs.has_candidates }}
+      prompt:         ${{ steps.build.outputs.prompt }}
+      model:          ${{ steps.config.outputs.model }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout (for config.yml)
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
+
+      - name: Fetch candidates and WIP state
+        id: fetch
+        run: |
+          PLANNED=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label planned \
+            --json number,title,labels,comments)
+          # Exclude issues also carrying reviewed — they have a PR awaiting merge
+          PLANNED=$(echo "$PLANNED" | jq '[.[] | select(
+            ([.labels[].name] | contains(["reviewed"])) | not
+          )]')
+          BLOCKED=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label blocked \
+            --json number,title,labels,comments)
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,labels,reviews,headRefName)
+          MAX_WIP=$(yq '.max_wip' .github/config/config.yml)
+          CURRENT_WIP=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label in-progress \
+            --json number | jq length)
+
+          TOTAL=$(echo "$PLANNED$BLOCKED" | jq -s 'add | length')
+          if [ "$TOTAL" = "0" ] && [ "$CURRENT_WIP" -ge "$MAX_WIP" ]; then
+            echo "has_candidates=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_candidates=true" >> $GITHUB_OUTPUT
+          fi
+
+          {
+            echo 'PLANNED_JSON<<EOF'
+            echo "$PLANNED"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+          {
+            echo 'BLOCKED_JSON<<EOF'
+            echo "$BLOCKED"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+          {
+            echo 'OPEN_PRS_JSON<<EOF'
+            echo "$OPEN_PRS"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+          echo "MAX_WIP=$MAX_WIP"        >> $GITHUB_ENV
+          {
+            echo 'CURRENT_WIP<<EOF'
+            echo "$CURRENT_WIP"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Build prompt
+        id: build
+        run: |
+          PROMPT="Repo owner: @${{ github.repository_owner }}
+          Planned issues: $PLANNED_JSON
+          Blocked issues: $BLOCKED_JSON
+          Open PRs: $OPEN_PRS_JSON
+          MAX_WIP: $MAX_WIP
+          CURRENT_WIP: $CURRENT_WIP"
+          echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
+
+  run:
+    needs: prepare
+    if: needs.prepare.outputs.has_candidates == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name: sprint-planner
+      command:  ghaw-sprint-plan
+      prompt:   ${{ needs.prepare.outputs.prompt }}
+      agent:    planner
+      model:    ${{ needs.prepare.outputs.model }}
+      timeout-minutes: 30
+    permissions:
+      issues:        write
+      pull-requests: write
+      contents:      read
+    secrets: inherit
+
+  verify:
+    needs: [prepare, run]
+    if: needs.prepare.outputs.has_candidates == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout (for config.yml)
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Assign sprint from WSJF scores
+        run: |
+          MAX_WIP=$(yq '.max_wip' .github/config/config.yml)
+          CURRENT_WIP=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label in-progress \
+            --json number | jq length)
+          SLOTS=$(( MAX_WIP - CURRENT_WIP ))
+          echo "WIP slots available: $SLOTS" >> $GITHUB_STEP_SUMMARY
+          [ "$SLOTS" -le "0" ] && echo "WIP limit reached — no assignments." >> $GITHUB_STEP_SUMMARY && exit 0
+
+          # Collect planned issues and their WSJF scores from comments
+          PLANNED=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label planned \
+            --json number,comments)
+
+          # Extract WSJF score from "📊 WSJF: {score}" comment, default 0
+          SCORED=$(echo "$PLANNED" | jq '[.[] | {
+            number: .number,
+            wsjf: (
+              [.comments[].body | capture("WSJF: (?<s>[0-9.]+)").s // "0"] | last | tonumber
+            )
+          }] | sort_by(-.wsjf)')
+
+          ASSIGNED=0
+          for NUMBER in $(echo "$SCORED" | jq -r '.[].number'); do
+            [ "$ASSIGNED" -ge "$SLOTS" ] && break
+            # Guard: skip issues already in reviewed — they have an open PR awaiting merge
+            IS_REVIEWED=$(gh api repos/${{ github.repository }}/issues/$NUMBER \
+              --jq '[.labels[].name] | contains(["reviewed"])')
+            if [ "$IS_REVIEWED" = "true" ]; then
+              echo "⏭️ #$NUMBER skipped — already reviewed, awaiting merge" >> $GITHUB_STEP_SUMMARY
+              continue
+            fi
+            gh issue edit $NUMBER \
+              --repo ${{ github.repository }} \
+              --add-label "in-progress" \
+              --remove-label "planned" \
+              --remove-label "open" \
+              --remove-label "blocked"
+            echo "✅ #$NUMBER → in-progress" >> $GITHUB_STEP_SUMMARY
+            ASSIGNED=$(( ASSIGNED + 1 ))
+          done

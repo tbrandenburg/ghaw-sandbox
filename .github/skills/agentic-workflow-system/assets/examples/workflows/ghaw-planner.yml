@@ -1,0 +1,152 @@
+name: GHAW - Planner Agent
+
+on:
+  issues:
+    types: [labeled]               # React immediately when ready label is set
+  schedule:
+    - cron: '0 0,6,12,18 * * *'    # Every 6h at :00 (catch-up for any missed events)
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to plan (leave empty to scan all unplanned ready issues)'
+        required: false
+        type: number
+
+jobs:
+  # ── Batch mode: scan ready issues without a plan (cron / empty dispatch) ──
+  scan-unplanned:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.issue_number == '')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Find and dispatch planner for each unplanned ready issue
+        run: |
+          ISSUES=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label ready \
+            --limit 100 \
+            --json number,comments)
+
+          for NUMBER in $(echo "$ISSUES" | jq -r '.[] | select(
+            ([.comments[].body | contains("<!-- PLAN -->")] | any) == false and
+            ([.comments[].body | contains("<!-- NO-ACTION -->")] | any) == false
+          ) | .number'); do
+            echo "Dispatching planner for issue #$NUMBER"
+            gh workflow run ghaw-planner.yml \
+              --repo ${{ github.repository }} \
+              -f issue_number=$NUMBER
+            sleep 2
+          done
+
+  # ── Single-issue mode: ready label set or workflow_dispatch with issue_number ──
+  prepare:
+    if: |
+      (github.event_name == 'issues' && github.event.label.name == 'ready') ||
+      (github.event_name == 'workflow_dispatch' && inputs.issue_number != '')
+    runs-on: ubuntu-latest
+    outputs:
+      issue_number: ${{ steps.check.outputs.issue_number }}
+      needs_plan:   ${{ steps.check.outputs.needs_plan }}
+      model:        ${{ steps.config.outputs.model }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
+
+      - name: Check if plan needed
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            ISSUE_NUMBER=${{ github.event.issue.number }}
+          else
+            ISSUE_NUMBER=${{ inputs.issue_number }}
+          fi
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+
+          HAS_PLAN=$(gh issue view $ISSUE_NUMBER \
+            --repo ${{ github.repository }} \
+            --json comments \
+            --jq '[.comments[].body | contains("<!-- PLAN -->")] | any')
+
+          HAS_NO_ACTION=$(gh issue view $ISSUE_NUMBER \
+            --repo ${{ github.repository }} \
+            --json comments \
+            --jq '[.comments[].body | contains("<!-- NO-ACTION -->")] | any')
+
+          if [ "$HAS_PLAN" = "true" ] || [ "$HAS_NO_ACTION" = "true" ]; then
+            echo "needs_plan=false" >> $GITHUB_OUTPUT
+          else
+            echo "needs_plan=true" >> $GITHUB_OUTPUT
+          fi
+
+  run:
+    needs: prepare
+    if: needs.prepare.outputs.needs_plan == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name: planner
+      command:  ghaw-plan-issue
+      prompt:   ${{ needs.prepare.outputs.issue_number }}
+      agent:    planner
+      model:    ${{ needs.prepare.outputs.model }}
+      timeout-minutes: 60
+    permissions:
+      issues:   write
+      contents: read
+    secrets: inherit
+
+  verify:
+    needs: [prepare, run]
+    if: needs.prepare.outputs.needs_plan == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify plan was created
+        run: |
+          ISSUE_NUMBER=${{ needs.prepare.outputs.issue_number }}
+          COMMENTS=$(gh issue view $ISSUE_NUMBER \
+            --repo ${{ github.repository }} \
+            --json comments \
+            --jq '[.comments[].body]')
+
+          HAS_PLAN=$(echo "$COMMENTS" | jq '[.[] | contains("<!-- PLAN -->")] | any')
+          HAS_NO_ACTION=$(echo "$COMMENTS" | jq '[.[] | contains("<!-- NO-ACTION -->")] | any')
+          HAS_CANNOT_PLAN=$(echo "$COMMENTS" | jq '[.[] | contains("<!-- CANNOT-PLAN -->")] | any')
+
+          if [ "$HAS_NO_ACTION" = "true" ]; then
+            echo "✅ NO-ACTION marker found — issue self-resolved, no plan needed." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          if [ "$HAS_CANNOT_PLAN" = "true" ] || [ "$HAS_PLAN" != "true" ]; then
+            gh issue edit $ISSUE_NUMBER \
+              --repo ${{ github.repository }} \
+              --add-label "blocked" \
+              --remove-label "ready"
+            if [ "$HAS_CANNOT_PLAN" != "true" ]; then
+              gh issue comment $ISSUE_NUMBER \
+                --repo ${{ github.repository }} \
+                --body "❌ Planner Agent produced no plan — blocked for PO clarification."
+            fi
+            echo "❌ Plan missing for issue #$ISSUE_NUMBER — blocked for PO clarification." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          gh issue edit $ISSUE_NUMBER \
+            --repo ${{ github.repository }} \
+            --add-label "planned" \
+            --remove-label "ready"
+          echo "✅ Plan verified for issue #$ISSUE_NUMBER — promoted to planned." >> $GITHUB_STEP_SUMMARY

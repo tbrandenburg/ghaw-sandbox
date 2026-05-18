@@ -1,0 +1,148 @@
+name: GHAW - Backlog Grooming Agent
+
+on:
+  schedule:
+    - cron: '0 0,6,12,18 * * *'    # Every 6h at :00 (cycle start)
+  workflow_dispatch:
+  issues:
+    types: [unlabeled]              # Re-assess when confidence/low is removed by PO
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_issues: ${{ steps.fetch.outputs.has_issues }}
+      issues_json: ${{ steps.fetch.outputs.issues_json }}
+      repo_owner: ${{ steps.fetch.outputs.repo_owner }}
+      model:       ${{ steps.config.outputs.model }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
+
+      - name: Fetch open issues
+        id: fetch
+        run: |
+          # If triggered by label removal, re-assess only that issue (if confidence/low was removed)
+          if [[ "${{ github.event_name }}" == "issues" ]]; then
+            REMOVED_LABEL="${{ github.event.label.name }}"
+            if [[ "$REMOVED_LABEL" != "confidence/low" ]]; then
+              echo "has_issues=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+            ISSUES=$(gh issue view "$ISSUE_NUMBER" \
+              --repo ${{ github.repository }} \
+              --json number,title,body,labels,comments,updatedAt \
+              --jq '[.]')
+          else
+            # Top 10 oldest-updated issues explicitly in open state
+            ISSUES=$(gh issue list \
+              --repo ${{ github.repository }} \
+              --label open \
+              --json number,title,body,labels,comments,updatedAt \
+              --jq 'sort_by(.updatedAt) | .[0:10]')
+          fi
+
+          COUNT=$(echo "$ISSUES" | jq length)
+          if [ "$COUNT" = "0" ]; then
+            echo "has_issues=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_issues=true" >> $GITHUB_OUTPUT
+            echo "issues_json=$(echo $ISSUES | jq -c .)" >> $GITHUB_OUTPUT
+            echo "repo_owner=${{ github.repository_owner }}" >> $GITHUB_OUTPUT
+          fi
+
+  run:
+    needs: prepare
+    if: needs.prepare.outputs.has_issues == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name: backlog-groomer
+      command:  ghaw-groom-issue
+      prompt:   "Repo owner: @${{ needs.prepare.outputs.repo_owner }}\nIssues: ${{ needs.prepare.outputs.issues_json }}"
+      agent:    groomer
+      model:    ${{ needs.prepare.outputs.model }}
+      timeout-minutes: 50
+    permissions:
+      issues:   write
+      contents: read
+    secrets: inherit
+
+  close-defocused:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Close any GitHub-open issues with defocus label
+        run: |
+          NUMBERS=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label defocus \
+            --state open \
+            --json number \
+            --jq '.[].number')
+          for NUMBER in $NUMBERS; do
+            gh issue close $NUMBER \
+              --repo ${{ github.repository }} \
+              --reason "not planned"
+            echo "🚫 #$NUMBER closed (defocus label detected)" >> $GITHUB_STEP_SUMMARY
+          done
+
+  verify:
+    needs: [prepare, run]
+    if: needs.prepare.outputs.has_issues == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Apply ready promotion and write summary
+        env:
+          ISSUES_JSON: ${{ needs.prepare.outputs.issues_json }}
+        run: |
+          COUNT=$(echo "$ISSUES_JSON" | jq length)
+          echo "✅ Groomed $COUNT issues" >> $GITHUB_STEP_SUMMARY
+
+          # Auto-promote to ready if confidence != low AND size != xl/l
+          # Only for issues that are still open (not defocused) after grooming
+          for NUMBER in $(echo "$ISSUES_JSON" | jq -r '.[].number'); do
+            LABELS=$(gh api repos/${{ github.repository }}/issues/$NUMBER \
+              --jq '[.labels[].name]')
+
+            # Skip if defocused, ready, in-progress, or blocked — groomer handles state transitions
+            IS_DEFOCUS=$(echo "$LABELS" | jq 'contains(["defocus"])')
+            IS_READY=$(echo "$LABELS" | jq 'contains(["ready"])')
+            IS_WIP=$(echo "$LABELS" | jq 'contains(["in-progress"])')
+            IS_BLOCKED=$(echo "$LABELS" | jq 'contains(["blocked"])')
+            [ "$IS_DEFOCUS" = "true" ] && continue
+            [ "$IS_READY" = "true" ] && continue
+            [ "$IS_WIP" = "true" ] && continue
+            [ "$IS_BLOCKED" = "true" ] && continue
+
+            HAS_LOW_CONF=$(echo "$LABELS" | jq 'contains(["confidence/low"])')
+            HAS_HIGH_COMP=$(echo "$LABELS" | jq 'contains(["size/xl"]) or contains(["size/l"])')
+
+            if [ "$HAS_LOW_CONF" = "false" ] && [ "$HAS_HIGH_COMP" = "false" ]; then
+              gh issue edit $NUMBER \
+                --repo ${{ github.repository }} \
+                --add-label "ready" \
+                --remove-label "open" \
+                --remove-label "blocked" \
+                --remove-label "in-progress" \
+                --remove-label "defocus"
+              echo "✅ #$NUMBER → ready (auto-promoted)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⏳ #$NUMBER → PO handoff required (confidence/low or size/xl or size/l)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done

@@ -1,0 +1,109 @@
+name: GHAW - CI/CD Agent
+
+on:
+  schedule:
+    - cron: '0 * * * *'    # Every full hour
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_failing: ${{ steps.filter.outputs.has_failing }}
+      prompt:      ${{ steps.build.outputs.prompt }}
+      model:       ${{ steps.config.outputs.model }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
+
+      - name: Find failing PRs
+        id: filter
+        run: |
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,headRefName,statusCheckRollup)
+
+          FAILING=$(echo "$OPEN_PRS" | jq '[.[] | select(
+            .statusCheckRollup != null and
+            (.statusCheckRollup | map(select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")) | length) > 0
+          )]')
+
+          COUNT=$(echo "$FAILING" | jq length)
+          if [ "$COUNT" = "0" ]; then
+            echo "has_failing=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_failing=true"  >> $GITHUB_OUTPUT
+          fi
+          {
+            echo 'FAILING<<EOF'
+            echo "$FAILING"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Collect CI logs
+        if: env.FAILING != '[]'
+        run: |
+          CI_LOGS=""
+          for PR in $(echo "$FAILING" | jq -r '.[].number'); do
+            BRANCH=$(echo "$FAILING" | jq -r --argjson pr $PR '.[] | select(.number == $pr) | .headRefName')
+            git checkout "$BRANCH" 2>/dev/null || true
+            RUN_ID=$(gh run list \
+              --repo ${{ github.repository }} \
+              --branch "$BRANCH" \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId')
+            LOG=$(gh run view "$RUN_ID" --log-failed 2>/dev/null | head -200 || echo "(no log)")
+            CI_LOGS="$CI_LOGS\n=== PR #$PR / Branch $BRANCH ===\n$LOG"
+          done
+          {
+            echo 'CI_LOGS<<EOF'
+            echo "$CI_LOGS"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Build prompt
+        id: build
+        run: |
+          PROMPT="Failing PRs: $FAILING
+          CI Logs: $CI_LOGS"
+          echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
+
+  run:
+    needs: prepare
+    if: needs.prepare.outputs.has_failing == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name: cicd-agent
+      command:  ghaw-resolve-ci-errors
+      prompt:   ${{ needs.prepare.outputs.prompt }}
+      agent:    dev
+      model:    ${{ needs.prepare.outputs.model }}
+      timeout-minutes: 60
+    permissions:
+      issues:        write
+      pull-requests: write
+      contents:      write
+    secrets: inherit
+
+  verify:
+    needs: [prepare, run]
+    if: needs.prepare.outputs.has_failing == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write summary
+        run: echo "✅ CI fix pushed — awaiting re-run" >> $GITHUB_STEP_SUMMARY

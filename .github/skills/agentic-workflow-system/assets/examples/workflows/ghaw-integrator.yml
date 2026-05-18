@@ -1,0 +1,270 @@
+name: GHAW - Integrator Agent
+
+on:
+  schedule:
+    - cron: '0 * * * *'    # Every full hour
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_candidates: ${{ steps.collect.outputs.has_candidates }}
+      prompt:         ${{ steps.build.outputs.prompt }}
+      model:          ${{ steps.config.outputs.model }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Read config
+        id: config
+        run: echo "model=$(yq '.model' .github/config/config.yml)" >> $GITHUB_OUTPUT
+
+      - name: Collect merge candidates and context
+        id: collect
+        run: |
+          # All approved, CI-green PRs
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,title,body,headRefName,baseRefName,reviewDecision,statusCheckRollup,mergeStateStatus,labels,additions,deletions,changedFiles,commits,createdAt,updatedAt)
+
+          CANDIDATES=$(echo "$OPEN_PRS" | jq '[.[] | select(
+            .reviewDecision == "APPROVED" and
+            (.statusCheckRollup | map(select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")) | length) == 0
+          )]')
+
+          COUNT=$(echo "$CANDIDATES" | jq length)
+          if [ "$COUNT" = "0" ]; then
+            echo "has_candidates=false" >> $GITHUB_OUTPUT
+            echo "No approved PRs to merge." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          echo "has_candidates=true" >> $GITHUB_OUTPUT
+          {
+            echo 'CANDIDATES<<EOF'
+            echo "$CANDIDATES"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Collect diffs and changed file manifests
+        if: env.CANDIDATES != ''
+        run: |
+          DIFFS="{}"
+          for PR in $(echo "$CANDIDATES" | jq -r '.[].number'); do
+            CHANGED=$(gh pr view $PR --json files --jq '[.files[].path]' 2>/dev/null || echo "[]")
+            DIFF_HEAD=$(gh pr diff $PR 2>/dev/null | head -300 || echo "(unavailable)")
+            DIFFS=$(echo "$DIFFS" | jq \
+              --argjson pr "$PR" \
+              --argjson files "$CHANGED" \
+              --arg diff "$DIFF_HEAD" \
+              '. + {($pr | tostring): {"files": $files, "diff_preview": $diff}}')
+          done
+          {
+            echo 'DIFFS<<EOF'
+            echo "$DIFFS"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Collect main branch state
+        run: |
+          MAIN_SHA=$(git rev-parse HEAD)
+          {
+            echo 'MAIN_SHA<<EOF'
+            echo "$MAIN_SHA"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+          {
+            echo 'MAIN_TREE<<EOF'
+            git ls-tree -r --name-only HEAD | head -100
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Detect cross-PR file conflicts
+        run: |
+          # Build a map: file -> [list of PR numbers touching it]
+          CONFLICT_MAP=$(echo "$CANDIDATES" | jq -r '.[].number' | while read PR; do
+            gh pr view $PR --json files --jq --argjson pr "$PR" \
+              '[.files[].path | {path: ., pr: $pr}]' 2>/dev/null
+          done | jq -s 'add // [] | group_by(.path) | map(select(length > 1)) |
+            map({file: .[0].path, prs: [.[].pr]})')
+          {
+            echo 'CONFLICT_MAP<<EOF'
+            echo "$CONFLICT_MAP"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Collect issue metadata for all candidate PRs
+        run: |
+          ISSUES="{}"
+          for PR in $(echo "$CANDIDATES" | jq -r '.[].number'); do
+            BODY=$(echo "$CANDIDATES" | jq -r --argjson pr "$PR" \
+              '.[] | select(.number == $pr) | .body')
+            ISSUE_NUM=$(echo "$BODY" | grep -oP '(?<=Closes #)\d+' | head -1)
+            if [ -n "$ISSUE_NUM" ]; then
+              ISSUE=$(gh issue view "$ISSUE_NUM" \
+                --json number,title,labels,body 2>/dev/null || echo "{}")
+              ISSUES=$(echo "$ISSUES" | jq \
+                --argjson pr "$PR" \
+                --argjson issue "$ISSUE" \
+                '. + {($pr | tostring): $issue}')
+            fi
+          done
+          {
+            echo 'ISSUES<<EOF'
+            echo "$ISSUES"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Build prompt
+        id: build
+        run: |
+          PROMPT="## Merge Agent Context
+
+          Main branch SHA: $MAIN_SHA
+
+          ## Approved PRs (candidates for merge)
+          $CANDIDATES
+
+          ## Per-PR changed files and diff previews
+          $DIFFS
+
+          ## Cross-PR file conflicts (files touched by multiple PRs)
+          $CONFLICT_MAP
+
+          ## Linked issue metadata
+          $ISSUES
+
+          ## Main branch file tree (first 100 files)
+          $MAIN_TREE"
+
+          echo "prompt=$(echo "$PROMPT" | jq -Rs .)" >> $GITHUB_OUTPUT
+
+  run:
+    needs: prepare
+    if: needs.prepare.outputs.has_candidates == 'true'
+    uses: ./.github/workflows/core-opencode-run.yml
+    with:
+      run-name: integrator-agent
+      command:  ghaw-integrate
+      prompt:   ${{ needs.prepare.outputs.prompt }}
+      agent:    integrator
+      model:    ${{ needs.prepare.outputs.model }}
+      timeout-minutes: 60
+    permissions:
+      issues:        write
+      pull-requests: write
+      contents:      write
+    secrets: inherit
+
+  verify:
+    needs: [prepare, run]
+    if: needs.prepare.outputs.has_candidates == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Verify merge results and clean up state labels
+        run: |
+          STILL_OPEN=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,reviewDecision \
+            --jq '[.[] | select(.reviewDecision == "APPROVED")] | length')
+          echo "Approved PRs still open after merge run: $STILL_OPEN" >> $GITHUB_STEP_SUMMARY
+
+          # For each recently merged PR, remove reviewed label from linked issue
+          MERGED=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state merged \
+            --limit 20 \
+            --json number,title,body,mergedAt)
+
+          echo "$MERGED" | jq -r '.[] | "\(.number) \(.body)"' | while read PR_NUM BODY; do
+            ISSUE_NUM=$(gh pr view $PR_NUM \
+              --repo ${{ github.repository }} \
+              --json body --jq '.body' \
+              | grep -oP '(?<=Closes #)\d+' | head -1)
+            [ -z "$ISSUE_NUM" ] && continue
+
+            HAS_REVIEWED=$(gh api repos/${{ github.repository }}/issues/$ISSUE_NUM \
+              --jq '[.labels[].name | select(. == "reviewed")] | length > 0' 2>/dev/null || echo "false")
+
+            if [ "$HAS_REVIEWED" = "true" ]; then
+              gh issue edit $ISSUE_NUM \
+                --repo ${{ github.repository }} \
+                --remove-label "reviewed"
+              echo "✅ Removed reviewed from #$ISSUE_NUM (PR #$PR_NUM merged)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          # Detect deferred PRs (agent posted ⏸️ Merge deferred) and apply blocked label
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number,body)
+
+          for PR_NUM in $(echo "$OPEN_PRS" | jq -r '.[].number'); do
+            DEFERRED=$(gh api repos/${{ github.repository }}/issues/$PR_NUM/comments \
+              --jq '[.[] | select(.body | contains("<!-- DEFERRED -->"))] | length > 0')
+            [ "$DEFERRED" != "true" ] && continue
+
+            ISSUE_NUM=$(gh pr view $PR_NUM \
+              --repo ${{ github.repository }} \
+              --json body --jq '.body' \
+              | grep -oP '(?<=Closes #)\d+' | head -1)
+            [ -z "$ISSUE_NUM" ] && continue
+
+            gh issue edit $ISSUE_NUM \
+              --repo ${{ github.repository }} \
+              --add-label "blocked" \
+              --remove-label "in-progress" \
+              --remove-label "ready" \
+              --remove-label "open" \
+              --remove-label "reviewed"
+            echo "⏸️ #$ISSUE_NUM → blocked (PR #$PR_NUM deferred)" >> $GITHUB_STEP_SUMMARY
+          done
+
+          # Escape hatch: if a PR was closed without merging, the issue is stuck in reviewed.
+          # Remove reviewed and reset to open so grooming picks it up again.
+          REVIEWED_ISSUES=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label reviewed \
+            --json number)
+
+          for ISSUE_NUM in $(echo "$REVIEWED_ISSUES" | jq -r '.[].number'); do
+            PR_NUM=$(gh pr list \
+              --repo ${{ github.repository }} \
+              --state all \
+              --json number,body \
+              --jq --argjson n "$ISSUE_NUM" \
+              '[.[] | select(.body | test("Closes #\($n)"; "i"))] | last | .number // empty')
+            [ -z "$PR_NUM" ] && continue
+
+            PR_STATE=$(gh pr view "$PR_NUM" --repo ${{ github.repository }} --json state --jq '.state')
+            if [ "$PR_STATE" = "CLOSED" ]; then
+              gh issue edit "$ISSUE_NUM" \
+                --repo ${{ github.repository }} \
+                --remove-label "reviewed" \
+                --add-label "open"
+              echo "♻️ #$ISSUE_NUM → open (PR #$PR_NUM was closed without merging)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          gh pr list \
+            --repo ${{ github.repository }} \
+            --state merged \
+            --limit 10 \
+            --json number,title,mergedAt \
+            --jq '.[] | "✅ Merged #\(.number): \(.title) at \(.mergedAt)"' \
+            >> $GITHUB_STEP_SUMMARY
