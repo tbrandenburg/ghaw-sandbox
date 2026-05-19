@@ -1,13 +1,13 @@
 ---
 name: agentic-workflow-system
 description: >
-  Set up or extend a GitHub Actions–based agentic workflow system (GHAW — GitHub Agentic
-  Workflow). Use when: creating a new autonomous issue-driven development system from scratch;
+  Set up or extend a GitHub Actions–based agentic workflow system.
+  Use when: creating a new autonomous issue-driven development system from scratch;
   adding new states, agents, or transitions to an existing system; designing state machines for
   GitHub issues; implementing OpenCode-based agents in GitHub Actions. Walks through full
   lifecycle: discovery interview → edge-case hardening → planning → implementation → validation.
-  Triggered by: "set up agentic workflow", "create GHAW", "add agent to workflow",
-  "extend state machine", "new state", "new agent".
+  Triggered by: "set up agentic workflow", "create agentic state machine", "add agent to workflow",
+  "extend state machine", "new state", "new agent step".
 argument-hint: 'Brief description of your project or the change you want to make'
 ---
 
@@ -43,9 +43,9 @@ Read [`references/AGENTIC_WORKFLOW_SYSTEM.md`](./references/AGENTIC_WORKFLOW_SYS
 before proceeding — it is your authoritative source for all architecture, naming conventions,
 file formats, and invariants.
 
-Use your questionaire tool (e.g. `vscode_askQuestions`) to collect the following. Ask in one batched call; group logically.
+Use your questionaire tool (e.g. `vscode_askQuestions`) to collect the information below. Ask in one batched call; group logically. The questions listed here are **examples** — adapt the wording to the user's context; the groups and topics are what matter.
 
-### Questions to Ask
+### Example Questions
 
 **Group A — System Identity**
 1. **Goal, Purpose and Scope** — What is this system trying to do autonomously? What human
@@ -92,9 +92,10 @@ Use your questionaire tool (e.g. `vscode_askQuestions`) to collect the following
 
 After collecting answers from Phase 1, **challenge the design**. For each of the following
 edge cases, verify the state machine handles it — or record it as a gap to resolve before
-planning:
+planning. The categories and items below are **examples** — apply them as prompts for
+reasoning, not as an exhaustive fixed checklist.
 
-### State Machine Invariants (must all hold)
+### Example: State Machine Invariants
 - [ ] Every issue carries **exactly one** state label at all times
       → `core-state-heal.yml` lists ALL state labels
 - [ ] Every state has **exactly one** owning workflow that transitions issues *out* of it
@@ -104,7 +105,7 @@ planning:
 - [ ] Every state that is not terminal has an agent and a verify step
 - [ ] `blocked` is reachable from every state (verify step always falls back to it)
 
-### Transition Completeness
+### Example: Transition Completeness
 - [ ] What happens if an agent produces no output (timeout, crash, empty response)?
       → Verify step must set `blocked` and exit 1
 - [ ] What happens if an issue is re-labeled by a human to an earlier state (manual retry)?
@@ -114,23 +115,23 @@ planning:
 - [ ] What happens if the issue reaches terminal state but the PR is not merged?
       → Integrator agent or a post-merge verify must close the issue / remove labels
 
-### Label Namespace Hygiene
+### Example: Label Namespace Hygiene
 - [ ] State labels have **no namespace prefix** (`open`, `in-progress`, not `state/open`)
 - [ ] Metadata labels use namespace prefix (`type/bug`, `priority/high`, `size/m`)
 - [ ] No metadata label name collides with any state label name
 
-### PR Lifecycle Gaps
+### Example: PR Lifecycle Gaps
 - [ ] What triggers the review agent? (PR opened, schedule, label on linked issue?)
 - [ ] What happens if CI fails after a PR is created? (CI/CD agent, dev agent retry?)
 - [ ] What happens if review requests changes and dev is slow to push? (schedule picks up)
 - [ ] What happens if a merge conflict arises after a PR is approved?
 
-### Verify Signal Coverage
+### Example: Verify Signal Coverage
 - [ ] For every signal an agent can post (`<!-- MARKER -->`), the verify step checks for it
 - [ ] Every success signal has a corresponding failure path (what if the marker is absent?)
 - [ ] Signal markers are HTML comments so they are invisible in the GitHub UI
 
-### Idempotency
+### Example: Idempotency
 - [ ] Running any workflow twice on the same issue produces the same state (no duplicates)
 - [ ] `setup-labels` and `install` in Makefile.ghprj are safe to re-run
 
