@@ -275,14 +275,18 @@ have been applied and re-confirmed. Do not infer approval from silence.
 Produce a concrete, minimal implementation plan. Focus on simplicity — add nothing that was
 not asked for or that does not directly serve a stated requirement.
 
-### Plan Format
+### Plan File
 
-Output the plan as a structured list:
+Write the plan to `docs/plans/###-[name].md` where `###` is the next available zero-padded
+sequential number in that directory and `[name]` is a short kebab-case descriptor
+(e.g. `001-initial-setup.md`, `002-add-review-state.md`).
 
-```
-## Implementation Plan
+Use the following structure for the file:
 
-### New Files to Create
+```markdown
+# Implementation Plan: [Name]
+
+## New Files to Create
 | File | Purpose |
 |------|---------|
 | .github/workflows/core-state-heal.yml | State exclusivity enforcer (required in every repo) |
@@ -292,35 +296,36 @@ Output the plan as a structured list:
 | .opencode/agent/[name].md | [One row per agent] |
 | .opencode/commands/[name].md | [One row per command] |
 
-### Existing Files to Modify (extension mode only)
+## Existing Files to Modify (extension mode only)
 | File | Change |
 |------|--------|
 | .github/workflows/core-state-heal.yml | Add [new-state] to state list |
 | [upstream verify step] | Change --add-label to [new-state] |
 
-### Labels to Create
+## Labels to Create
 | Label | Color | Description |
 |-------|-------|-------------|
 | [state label] | [hex] | [description] |
 | [metadata label] | [hex] | [description] |
 
-### Manual Post-Install Steps
+## Manual Post-Install Steps
 1. GitHub Settings → Actions → Workflow permissions → Read and write
 2. GitHub Settings → Actions → Allow GitHub Actions to create and approve pull requests
 3. [Any secrets to configure]
 4. [Any branch protection rules]
 
-### Deferred (out of scope for this run)
+## Deferred (out of scope for this run)
 - [anything explicitly decided not to implement now]
 ```
 
-**MANDATORY GATE — Plan review:** Present the full implementation plan to the user and ask
+**MANDATORY GATE — Plan review:** Share the path to the written plan file with the user and ask
 them to review it before proceeding. Use `vscode_askQuestions` with at minimum:
 - A confirmation that the file list is correct and nothing is missing or superfluous.
 - A confirmation that the label set is correct.
 - A confirmation that the manual post-install steps are understood and acceptable.
 - An open field for any corrections or additions.
 
+Apply any corrections to the plan file before proceeding.
 Do not proceed to Phase 5 until the user explicitly approves the plan or all corrections
 have been applied and re-confirmed. Do not infer approval from silence.
 
