@@ -283,10 +283,52 @@ sequential number in that directory and `[name]` is a short kebab-case descripto
 
 Use the following structure for the file:
 
-```markdown
+````markdown
 # Implementation Plan: [Name]
 
+> Context: [docs/PRD.md](../PRD.md)
+
+## Plan Metadata
+
+| Field | Value |
+|---|---|
+| **Mode** | New system / Extend existing |
+| **Complexity** | Low / Medium / High |
+| **Primary Workflows Affected** | [e.g. sm-ready.yml, core-state-heal.yml] |
+| **New States** | [comma-separated, or none] |
+| **New Agents** | [comma-separated, or none] |
+
+---
+
+## Context References
+
+Files to read **before implementing**. Understand each before touching any file.
+
+| File | Why |
+|---|---|
+| `.github/workflows/[closest-existing-sm].yml` | Mirror its three-phase structure for new state workflows |
+| `.opencode/agent/[closest-existing-agent].md` | Mirror persona and output contract format |
+| `.opencode/commands/[closest-existing-command].md` | Mirror signal markers and step structure |
+| `.github/workflows/core-state-heal.yml` | Know the current state list before modifying it |
+
+---
+
+## Patterns to Follow
+
+**Signal marker naming:** `<!-- VERB-NOUN -->` in all caps, e.g. `<!-- PLAN-READY -->`, `<!-- DEV-BLOCKED -->`
+
+**Verify step fallback:** always `gh issue edit --add-label blocked` when expected signal is absent, then `exit 1`
+
+**Cron schedule:** match the cadence of the nearest equivalent existing workflow unless requirements differ
+
+**State label format:** no namespace prefix, kebab-case (`in-progress`, not `state/in-progress`)
+
+**Metadata label format:** namespaced, kebab-case (`type/bug`, `priority/high`)
+
+---
+
 ## New Files to Create
+
 | File | Purpose |
 |------|---------|
 | .github/workflows/core-state-heal.yml | State exclusivity enforcer (required in every repo) |
@@ -297,26 +339,91 @@ Use the following structure for the file:
 | .opencode/commands/[name].md | [One row per command] |
 
 ## Existing Files to Modify (extension mode only)
+
 | File | Change |
 |------|--------|
 | .github/workflows/core-state-heal.yml | Add [new-state] to state list |
 | [upstream verify step] | Change --add-label to [new-state] |
 
 ## Labels to Create
+
 | Label | Color | Description |
 |-------|-------|-------------|
 | [state label] | [hex] | [description] |
 | [metadata label] | [hex] | [description] |
 
 ## Manual Post-Install Steps
+
 1. GitHub Settings → Actions → Workflow permissions → Read and write
 2. GitHub Settings → Actions → Allow GitHub Actions to create and approve pull requests
 3. [Any secrets to configure]
 4. [Any branch protection rules]
 
 ## Deferred (out of scope for this run)
+
 - [anything explicitly decided not to implement now]
+
+---
+
+## Step-by-Step Tasks
+
+Execute in order. Each task is atomic and independently verifiable.
+
+### CREATE `.github/workflows/sm-[state].yml`
+
+- **MIRROR**: `.github/workflows/sm-[closest-state].yml` — three-phase structure
+- **PATTERN**: `[STATE-LABEL]` → `[NEXT-STATE]` on `<!-- SIGNAL -->`; fall back to `blocked`
+- **GOTCHA**: `has_candidates` gate must appear in both `run` and `verify` jobs
+- **VALIDATE**: `actionlint -shellcheck= .github/workflows/sm-[state].yml`
+
+### UPDATE `.github/workflows/core-state-heal.yml`
+
+- **ADD**: `[new-state]` in all three locations: `fromJSON([...])`, `STATE_LABELS`, `--argjson states`
+- **GOTCHA**: missing any one of the three locations causes label conflicts to go undetected
+- **VALIDATE**: `grep -c '"[new-state]"' .github/workflows/core-state-heal.yml` → must return 3
+
+### CREATE `.opencode/agent/[name].md`
+
+- **MIRROR**: `.opencode/agent/[closest-agent].md` — frontmatter + output contract format
+- **PATTERN**: `description:` in frontmatter; signal marker documented in output contract
+- **VALIDATE**: `grep -q "^description:" .opencode/agent/[name].md || echo FAIL`
+
+### CREATE `.opencode/commands/[name].md`
+
+- **MIRROR**: `.opencode/commands/[closest-command].md`
+- **PATTERN**: `description:` and `argument-hint:` in frontmatter; signal markers match verify step
+- **VALIDATE**: `grep -q "^argument-hint:" .opencode/commands/[name].md || echo FAIL`
+
+<!-- Add one task block per file in the plan -->
+
+---
+
+## Validation Commands
+
+Run after all files are created. Zero failures required before committing.
+
+```bash
+# Lint
+yamllint .github/workflows/*.yml .github/config/config.yml
+actionlint -shellcheck= .github/workflows/*.yml
+
+# Structural checks
+for f in .github/workflows/sm-*.yml; do
+  grep -q "^  prepare:" "$f" && grep -q "^  run:" "$f" && grep -q "^  verify:" "$f" \
+    || echo "FAIL: $f missing a phase"
+done
+
+# State healer sync
+grep -c '"[new-state]"' .github/workflows/core-state-heal.yml  # must be 3
+
+# Signal coverage
+for CMD in .opencode/commands/*.md; do
+  grep -oP '<!-- [A-Z-]+ -->' "$CMD" | while read SIG; do
+    grep -rl "$(echo $SIG | tr -d '<>! -')" .github/workflows/ || echo "WARNING: $SIG not found in workflows"
+  done
+done
 ```
+````
 
 **MANDATORY GATE — Plan review:** Share the path to the written plan file with the user and ask
 them to review it before proceeding. Use `vscode_askQuestions` with at minimum:
