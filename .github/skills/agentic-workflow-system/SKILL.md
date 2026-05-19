@@ -23,15 +23,16 @@ your implementation must follow word-by-word.
 
 ---
 
-## Overview: Six Phases
+## Overview: Seven Phases
 
 ```
 Phase 1 — Discovery        → interview user, understand system requirements
 Phase 2 — Edge-Case Hardening → challenge design, expose gaps, iterate to water-tight
-Phase 3 — Planning         → produce a concrete, minimal implementation plan
-Phase 4 — Plan Review      → validate plan against AGENTIC_WORKFLOW_SYSTEM.md invariants
-Phase 5 — Implementation   → create all files deterministically
-Phase 6 — Validation       → run structural and live checks
+Phase 3 — PRD              → create or update docs/PRD.md with the agreed design
+Phase 4 — Planning         → produce a concrete, minimal implementation plan
+Phase 5 — Plan Review      → validate plan against AGENTIC_WORKFLOW_SYSTEM.md invariants
+Phase 6 — Implementation   → create all files deterministically
+Phase 7 — Validation       → run structural and live checks
 ```
 
 ---
@@ -138,7 +139,103 @@ is gap-free. Do not proceed to Phase 3 until all gaps are resolved or explicitly
 
 ---
 
-## Phase 3: Planning
+## Phase 3: PRD
+
+Create or update `docs/PRD.md` using the agreed design from Phases 1 and 2. This document
+is the single source of truth for the system's purpose, requirements, and state machine.
+It must be committed alongside the implementation so decisions are traceable.
+
+If `docs/PRD.md` already exists (extension mode), update only the sections that changed —
+do not overwrite content that remains accurate.
+
+Use the following template:
+
+```markdown
+# <Agentic Workflow System Name>
+
+## Goal
+What are we building and why?
+
+---
+
+## Purpose
+What is the purpose/outcome of the agentic workflow system?
+
+---
+
+## Requirements
+- System must ...
+- System must ...
+- System must not ...
+
+---
+
+## Inputs
+- ...
+
+## Outputs
+- ...
+
+---
+
+## Environment and Constraints
+- ...
+- ...
+- ...
+
+---
+
+## Agentic State Machine
+
+| State | Entry Conditions | Entry Actions | Agent Actions | Exit Conditions | Exit Actions | Next State(s) |
+|---|---|---|---|---|---|---|
+| Idle | ... | ... | ... | ... | ... | ... |
+| Planning | ... | ... | ... | ... | ... | ... |
+| Executing | ... | ... | ... | ... | ... | ... |
+| Complete | ... | ... | ... | ... | ... | terminal |
+
+---
+
+## State-less Agent Actions
+
+| Trigger | Action | Conditions | Side Effects | Failure Handling |
+|---|---|---|---|---|
+| Cron: every hour | sync_data() | API available | Updates cache | Retry 3x |
+| Webhook received | process_webhook() | Valid signature | Store event | Dead-letter queue |
+| User inactivity 7d | send_reminder() | User opted in | Sends email | Log failure |
+
+---
+
+## Edge Cases
+- If ..., then ...
+- If ..., then ...
+
+---
+
+## Acceptance Criteria
+- [ ] ...
+- [ ] ...
+- [ ] ...
+
+---
+
+## Technical Notes
+- APIs
+- dependencies
+- architectural constraints
+- implementation guidance
+```
+
+### Checklist before proceeding to Phase 4
+- [ ] All states from the Phase 2 design appear in the State Machine table
+- [ ] All stateless agents from the Phase 2 design appear in the State-less Agent Actions table
+- [ ] All edge cases surfaced in Phase 2 appear in the Edge Cases section
+- [ ] Acceptance Criteria map to the stated requirements
+- [ ] `docs/PRD.md` is written (or updated) in the repo
+
+---
+
+## Phase 4: Planning
 
 Produce a concrete, minimal implementation plan. Focus on simplicity — add nothing that was
 not asked for or that does not directly serve a stated requirement.
@@ -184,7 +281,7 @@ Output the plan as a structured list:
 
 ---
 
-## Phase 4: Plan Review
+## Phase 5: Plan Review
 
 Before implementing, validate the plan against the following checklist. **Do not implement
 if any MUST item is violated.**
@@ -219,7 +316,7 @@ if any MUST item is violated.**
 
 ---
 
-## Phase 5: Implementation
+## Phase 6: Implementation
 
 Work through the plan file by file in this order:
 
@@ -452,7 +549,7 @@ uv run pytest tests/test_<project>_state_machine.py
 
 ---
 
-## Phase 6: Validation
+## Phase 7: Validation
 
 After creating all files, run the structural validation checks from
 [`references/AGENTIC_WORKFLOW_SYSTEM.md`](./references/AGENTIC_WORKFLOW_SYSTEM.md)
@@ -541,7 +638,7 @@ for CMD in .opencode/commands/*.md; do
 done
 ```
 
-### Behavioral Simulation Checks (if simulation layer was set up in Phase 5 Step 8)
+### Behavioral Simulation Checks (if simulation layer was set up in Phase 6 Step 8)
 ```bash
 # Install dev deps
 uv sync
