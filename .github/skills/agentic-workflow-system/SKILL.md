@@ -26,24 +26,39 @@ your implementation must follow word-by-word.
 ## Overview: Seven Phases
 
 ```
-Phase 1 — Discovery        → interview user, understand system requirements
-Phase 2 — Edge-Case Hardening → challenge design, expose gaps, iterate to water-tight
-Phase 3 — PRD              → create or update docs/PRD.md with the agreed design
-Phase 4 — Planning         → produce a concrete, minimal implementation plan
-Phase 5 — Plan Review      → validate plan against AGENTIC_WORKFLOW_SYSTEM.md invariants
+Phase 1 — Discovery        → interview user, understand system requirements  [MANDATORY GATE]
+Phase 2 — Edge-Case Hardening → challenge design, expose gaps, iterate to water-tight  [MANDATORY GATE]
+Phase 3 — PRD              → create or update docs/PRD.md with the agreed design        [MANDATORY GATE]
+Phase 4 — Planning         → produce a concrete, minimal implementation plan             [MANDATORY GATE]
+Phase 5 — Plan Review      → validate plan against AGENTIC_WORKFLOW_SYSTEM.md invariants [MANDATORY GATE]
 Phase 6 — Implementation   → create all files deterministically
 Phase 7 — Validation       → run structural and live checks
 ```
+
+> **CRITICAL:** Phases 1–5 are **mandatory gates** — every phase requires explicit user
+> sign-off before the next phase begins. You MUST NOT skip or merge phases even if the user
+> provides a detailed specification upfront or says "just do it". A pre-supplied spec is the
+> *input* to Phase 1, not a bypass. Proceeding past any gate without explicit user confirmation
+> is a protocol violation.
 
 ---
 
 ## Phase 1: Discovery Interview
 
+**MANDATORY GATE — do not skip even when the user has provided a full specification.**
+If the user already supplied a spec, your job in Phase 1 is to **validate and confirm** it,
+not merely to fill gaps. Treat the spec as a first draft: surface ambiguities, confirm
+unstated assumptions, and ensure every topic below is explicitly resolved.
+
 Read [`references/AGENTIC_WORKFLOW_SYSTEM.md`](./references/AGENTIC_WORKFLOW_SYSTEM.md)
 before proceeding — it is your authoritative source for all architecture, naming conventions,
 file formats, and invariants.
 
-Use your questionaire tool (e.g. `vscode_askQuestions`) to collect the information below. Ask in one batched call; group logically. The questions listed here are **examples** — adapt the wording to the user's context; the groups and topics are what matter.
+Use your questionaire tool (e.g. `vscode_askQuestions`) to collect or confirm the information
+below. Ask in one batched call; group logically. When the user's request already answers a
+question, pre-fill the answer in the question prompt and ask the user to confirm or correct it
+— do not silently skip the question. The questions listed here are **examples** — adapt the
+wording to the user's context; the groups and topics are what matter.
 
 ### Example Questions
 
@@ -136,7 +151,17 @@ reasoning, not as an exhaustive fixed checklist.
 - [ ] `setup-labels` and `install` in Makefile.ghprj are safe to re-run
 
 **For each gap found**: iterate with the user using your questionaire tool (e.g. `vscode_askQuestions`) until the design
-is gap-free. Do not proceed to Phase 3 until all gaps are resolved or explicitly accepted.
+is gap-free.
+
+**MANDATORY GATE — Phase 2 sign-off:** Before proceeding to Phase 3, present the user with
+a summary of:
+1. All edge cases that are **fully handled** and how.
+2. All gaps that were **accepted by the user** (list them explicitly).
+3. Any items that **require a design decision** still pending.
+
+Only move to Phase 3 after the user explicitly confirms the design is acceptable. Use
+`vscode_askQuestions` for this confirmation — a simple "Looks good, proceed" is sufficient,
+but it must be explicit. Do not infer consent from silence or from the user's original request.
 
 ---
 
@@ -234,6 +259,15 @@ What is the purpose/outcome of the agentic workflow system?
 - [ ] Acceptance Criteria map to the stated requirements
 - [ ] `docs/PRD.md` is written (or updated) in the repo
 
+**MANDATORY GATE — PRD review:** Present the completed `docs/PRD.md` to the user and ask
+them to review it before proceeding. Use `vscode_askQuestions` with at minimum:
+- A confirmation that the state machine table is correct and complete.
+- A confirmation that the requirements and acceptance criteria are accurate.
+- An open field for any corrections or additions.
+
+Do not proceed to Phase 4 until the user explicitly approves the PRD or all corrections
+have been applied and re-confirmed. Do not infer approval from silence.
+
 ---
 
 ## Phase 4: Planning
@@ -280,9 +314,21 @@ Output the plan as a structured list:
 - [anything explicitly decided not to implement now]
 ```
 
+**MANDATORY GATE — Plan review:** Present the full implementation plan to the user and ask
+them to review it before proceeding. Use `vscode_askQuestions` with at minimum:
+- A confirmation that the file list is correct and nothing is missing or superfluous.
+- A confirmation that the label set is correct.
+- A confirmation that the manual post-install steps are understood and acceptable.
+- An open field for any corrections or additions.
+
+Do not proceed to Phase 5 until the user explicitly approves the plan or all corrections
+have been applied and re-confirmed. Do not infer approval from silence.
+
 ---
 
 ## Phase 5: Plan Review
+
+**MANDATORY GATE — structural validation before implementation.**
 
 Before implementing, validate the plan against the following checklist. **Do not implement
 if any MUST item is violated.**
